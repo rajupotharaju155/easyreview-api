@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../easyreview-site"
+		},
+		{
+			"path": "../easyreview-ui"
+		}
+	]
+}
