@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository, UpdateResult } from 'typeorm';
-import { UsersService } from '../users/users.service';
+import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import { Business } from './entities/business.entity';
@@ -11,31 +11,31 @@ export class BusinessesService {
   constructor(
     @InjectRepository(Business)
     private readonly businessRepository: Repository<Business>,
-    private readonly usersService: UsersService,
+    private readonly currentUserUtil: CurrentUserUtil,
   ) {}
 
   async create(createBusinessDto: CreateBusinessDto): Promise<Business> {
-    await this.usersService.findOne(createBusinessDto.userId);
+    const userId = this.currentUserUtil.getCurrentUserId();
 
     try {
       const business = this.businessRepository.create({
         name: createBusinessDto.name,
-        userId: createBusinessDto.userId,
+        userId,
       });
       return await this.businessRepository.save(business);
     } catch (error) {
       if (this.isForeignKeyViolation(error)) {
-        throw new NotFoundException(
-          `User with id "${createBusinessDto.userId}" not found`,
-        );
+        throw new NotFoundException(`User with id "${userId}" not found`);
       }
       throw error;
     }
   }
 
   async findAll(userId?: string): Promise<Business[]> {
+    const ownerId = userId ?? this.currentUserUtil.getCurrentUserId();
+
     return this.businessRepository.find({
-      where: userId ? { userId } : undefined,
+      where: { userId: ownerId },
       order: { createdAt: 'DESC' },
     });
   }
