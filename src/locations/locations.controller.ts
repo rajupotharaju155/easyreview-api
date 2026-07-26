@@ -8,9 +8,11 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Public } from '../common/decorators/public.decorator';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
+import { PublicLocationDto } from './dto/public-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { Location } from './entities/location.entity';
 import { LocationsService } from './locations.service';
@@ -29,6 +31,12 @@ export class LocationsController {
     @Query() paginationDto: PaginationDto,
   ): Promise<PaginatedResponseDto<Location>> {
     return this.locationsService.findAllPaginated(paginationDto);
+  }
+
+  @Public()
+  @Get('by-slug/:slug')
+  findPublicBySlug(@Param('slug') slug: string): Promise<PublicLocationDto> {
+    return this.locationsService.findLocationBySlug(slug);
   }
 
   @Get(':id')

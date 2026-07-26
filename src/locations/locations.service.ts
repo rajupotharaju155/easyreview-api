@@ -13,6 +13,7 @@ import {
   slugWithSuffix,
 } from '../common/utils/slug.util';
 import { CreateLocationDto } from './dto/create-location.dto';
+import { PublicLocationDto } from './dto/public-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import {
   LOCATION_METRIC_PERIOD_BASELINE,
@@ -177,6 +178,35 @@ export class LocationsService {
     }
 
     return location;
+  }
+
+  async findLocationBySlug(slug: string): Promise<PublicLocationDto> {
+    const location = await this.locationRepository.findOne({
+      where: { slug },
+      select: [
+        'name',
+        'placeId',
+        'slug',
+        'city',
+        'state',
+        'keywords',
+        'languages',
+      ],
+    });
+
+    if (!location || !location.slug) {
+      throw new NotFoundException(`Location with slug "${slug}" not found`);
+    }
+
+    return new PublicLocationDto({
+      name: location.name,
+      placeId: location.placeId,
+      slug: location.slug,
+      city: location.city,
+      state: location.state,
+      keywords: location.keywords,
+      languages: location.languages,
+    });
   }
 
   async update(
