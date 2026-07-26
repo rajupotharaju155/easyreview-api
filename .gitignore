@@ -3,8 +3,6 @@
 /node_modules
 /build
 .yarn-cache
-/src/generated
-.env
 
 # Logs
 logs
@@ -39,9 +37,8 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 # dotenv environment variable files
-.env
-.env.staging
-.env.production
+.env*
+!.env.example
 
 # temp directory
 .temp

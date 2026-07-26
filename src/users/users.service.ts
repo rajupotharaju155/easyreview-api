@@ -3,54 +3,46 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type User } from '../generated/prisma';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../prisma/prisma.service';
+import { QueryFailedError, Repository, UpdateResult } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-/** Derived from the Prisma model — stays in sync when the schema changes. */
-type SafeUser = Omit<User, 'password'>;
+import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<SafeUser> {
+  async create(createUserDto: CreateUserDto): Promise<User> {
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
     try {
-      return await this.prisma.user.create({
-        data: {
-          email: createUserDto.email,
-          name: createUserDto.name,
-          password: hashedPassword,
-        },
-        omit: { password: true },
+      const user = this.userRepository.create({
+        email: createUserDto.email,
+        name: createUserDto.name,
+        password: hashedPassword,
       });
+      return await this.userRepository.save(user);
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (this.isUniqueViolation(error)) {
         throw new ConflictException('Email already in use');
       }
       throw error;
     }
   }
 
-  async findAll(): Promise<SafeUser[]> {
-    return this.prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      omit: { password: true },
+  async findAll(): Promise<User[]> {
+    return this.userRepository.find({
+      order: { createdAt: 'DESC' },
     });
   }
 
-  async findOne(id: string): Promise<SafeUser> {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-      omit: { password: true },
-    });
+  async findOne(id: string): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id } });
 
     if (!user) {
       throw new NotFoundException(`User with id "${id}" not found`);
@@ -59,14 +51,10 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<SafeUser> {
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     await this.findOne(id);
 
-    const data: {
-      email?: string;
-      name?: string;
-      password?: string;
-    } = {
+    const data: Partial<User> = {
       email: updateUserDto.email,
       name: updateUserDto.name,
     };
@@ -76,28 +64,26 @@ export class UsersService {
     }
 
     try {
-      return await this.prisma.user.update({
-        where: { id },
-        data,
-        omit: { password: true },
-      });
+      await this.userRepository.update(id, data);
+      return await this.findOne(id);
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (this.isUniqueViolation(error)) {
         throw new ConflictException('Email already in use');
       }
       throw error;
     }
   }
 
-  async remove(id: string): Promise<SafeUser> {
+  async remove(id: string): Promise<UpdateResult> {
     await this.findOne(id);
+    return this.userRepository.softDelete(id);
+  }
 
-    return this.prisma.user.delete({
-      where: { id },
-      omit: { password: true },
-    });
+  private isUniqueViolation(error: unknown): boolean {
+    return (
+      error instanceof QueryFailedError &&
+      (error as QueryFailedError & { driverError?: { code?: string } })
+        .driverError?.code === '23505'
+    );
   }
 }

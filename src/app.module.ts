@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+import { BusinessesModule } from './businesses/businesses.module';
 import { CommonModule } from './common/common.module';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 import { LoggerService } from './common/services/logger.service';
+import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
-import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
 /**
@@ -17,6 +18,9 @@ function getEnvFilePath(): string {
   logger.setContext('AppModule');
 
   switch (nodeEnv) {
+    case 'development':
+      logger.log('[app.module.ts] Loading .env.development');
+      return '.env.development';
     case 'staging':
       logger.log('[app.module.ts] Loading .env.staging');
       return '.env.staging';
@@ -38,9 +42,10 @@ function getEnvFilePath(): string {
       ignoreEnvFile: false,
     }),
     CommonModule,
-    PrismaModule,
+    DatabaseModule,
     HealthModule,
     UsersModule,
+    BusinessesModule,
   ],
   controllers: [],
   providers: [

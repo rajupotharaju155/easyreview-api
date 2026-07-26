@@ -29,6 +29,21 @@ Server starts at `http://localhost:3000`.
 curl http://localhost:3000/health
 ```
 
+## Migrations
+
+```bash
+# Create a new migration
+yarn migration:create --name=CreateFooTable
+
+# Run migrations
+yarn migration:run:staging
+yarn migration:run:prod
+
+# Revert last migration
+yarn migration:revert:staging
+yarn migration:revert:prod
+```
+
 ## Scripts
 
 | Script | Description |
@@ -38,6 +53,6 @@ curl http://localhost:3000/health
 | `yarn build` | Build for production |
 | `yarn prod` | Run compiled production build |
 | `yarn lint` | Lint and fix TypeScript files |
-| `yarn prisma:generate` | Generate Prisma client |
-| `yarn prisma:migrate` | Run Prisma migrations |
-| `yarn prisma:studio` | Open Prisma Studio |
+| `yarn migration:create --name=Name` | Create a new empty migration |
+| `yarn migration:run:staging` | Run migrations against staging |
+| `yarn migration:revert:staging` | Revert last staging migration |
