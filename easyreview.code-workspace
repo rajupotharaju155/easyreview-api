@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../easyreview-ui"
+		},
+		{
+			"path": "../../AAAIntelligic/dutyflex-backend"
 		}
 	]
 }

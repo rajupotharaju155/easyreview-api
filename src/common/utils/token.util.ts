@@ -62,6 +62,5 @@ export async function generateTokens(
     expiresIn: refreshExpiresIn,
   });
 
-
   return { accessToken, refreshToken };
 }

@@ -9,7 +9,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Business } from '../../businesses/entities/business.entity';
+import { Location } from '../../locations/entities/location.entity';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 
 @Entity('users')
@@ -31,8 +31,8 @@ export class User {
   @Exclude()
   password: string;
 
-  @OneToMany(() => Business, (business) => business.user)
-  businesses: Business[];
+  @OneToMany(() => Location, (location) => location.user)
+  locations: Location[];
 
   @CreateDateColumn({
     type: 'timestamp',
