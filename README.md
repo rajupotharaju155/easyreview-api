@@ -8,10 +8,17 @@ NestJS backend for EasyReview.
 yarn install
 ```
 
-## Run locally
+Copy `.env.example` to `.env.staging` / `.env.production` and fill in values.
+
+## Run
 
 ```bash
-yarn dev
+# Staging (watch mode)
+yarn staging
+
+# Production (compiled)
+yarn build
+yarn prod
 ```
 
 Server starts at `http://localhost:3000`.
@@ -26,7 +33,11 @@ curl http://localhost:3000/health
 
 | Script | Description |
 |--------|-------------|
-| `yarn dev` | Local development with watch mode (`NODE_ENV=local`) |
+| `yarn staging` | Run with `NODE_ENV=staging` (watch mode) |
+| `yarn production` | Run with `NODE_ENV=production` |
 | `yarn build` | Build for production |
 | `yarn prod` | Run compiled production build |
 | `yarn lint` | Lint and fix TypeScript files |
+| `yarn prisma:generate` | Generate Prisma client |
+| `yarn prisma:migrate` | Run Prisma migrations |
+| `yarn prisma:studio` | Open Prisma Studio |

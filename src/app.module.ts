@@ -5,27 +5,28 @@ import { CommonModule } from './common/common.module';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 import { LoggerService } from './common/services/logger.service';
 import { HealthModule } from './health/health.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { UsersModule } from './users/users.module';
 
 /**
- * Determines which environment file to load based on NODE_ENV
+ * Loads env file for staging or production only.
  */
-function getEnvFilePath(): string | string[] {
+function getEnvFilePath(): string {
   const nodeEnv = process.env.NODE_ENV;
   const logger = new LoggerService();
   logger.setContext('AppModule');
 
   switch (nodeEnv) {
-    case 'local':
-      logger.log('[app.module.ts] Loading .env.local for local development');
-      return ['.env.local'];
     case 'staging':
-      logger.log('[app.module.ts] Loading .env.staging for staging');
-      return ['.env.staging'];
+      logger.log('[app.module.ts] Loading .env.staging');
+      return '.env.staging';
+    case 'production':
+      logger.log('[app.module.ts] Loading .env.production');
+      return '.env.production';
     default:
-      logger.log(
-        '[app.module.ts] NODE_ENV not set, Loading .env for production',
+      throw new Error(
+        `Unsupported NODE_ENV "${nodeEnv ?? ''}". Use "staging" or "production".`,
       );
-      return '.env';
   }
 }
 
@@ -37,7 +38,9 @@ function getEnvFilePath(): string | string[] {
       ignoreEnvFile: false,
     }),
     CommonModule,
+    PrismaModule,
     HealthModule,
+    UsersModule,
   ],
   controllers: [],
   providers: [

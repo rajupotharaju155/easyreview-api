@@ -14,7 +14,7 @@ export class HealthController {
       message: 'EasyReview API is healthy and running',
       timestamp: new Date().toISOString(),
       uptime: `${Math.floor(process.uptime())} seconds`,
-      environment: process.env.NODE_ENV || 'development',
+      environment: process.env.NODE_ENV || 'production',
       version: '1.0.0',
     };
   }
