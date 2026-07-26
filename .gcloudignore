@@ -1,0 +1,22 @@
+# Keep upload small for Cloud Build. Docker still uses .dockerignore for the image context.
+.git
+.github
+.vscode
+.idea
+node_modules
+dist
+build
+coverage
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.tmp
+.temp
+.yarn-cache
+easyreview.code-workspace
+**/*spec.ts
+test
+README.md
+agent-transcripts

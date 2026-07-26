@@ -12,8 +12,7 @@
     "start": "nest start",
     "dev": "NODE_ENV=development nest start --watch",
     "staging": "NODE_ENV=staging nest start --watch",
-    "production": "NODE_ENV=production nest start",
-    "prod": "NODE_ENV=production node dist/main",
+    "production": "NODE_ENV=production node dist/src/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -27,7 +26,13 @@
     "migration:run:prod": "NODE_ENV=production npm run typeorm -- migration:run -d ./typeorm.config.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d ./typeorm.config.ts",
     "migration:revert:staging": "NODE_ENV=staging npm run typeorm -- migration:revert -d ./typeorm.config.ts",
-    "migration:revert:prod": "NODE_ENV=production npm run typeorm -- migration:revert -d ./typeorm.config.ts"
+    "migration:revert:prod": "NODE_ENV=production npm run typeorm -- migration:revert -d ./typeorm.config.ts",
+    "docker:build": "docker build -t easyreview-api:local .",
+    "docker:run": "docker run --rm -p 8080:8080 -e NODE_ENV=production --env-file .env.production easyreview-api:local",
+    "gcp:bootstrap:staging": "bash scripts/bootstrap-gcp.sh staging",
+    "gcp:bootstrap:production": "bash scripts/bootstrap-gcp.sh production",
+    "deploy:staging": "bash scripts/deploy-cloud-run.sh staging",
+    "deploy:production": "bash scripts/deploy-cloud-run.sh production"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

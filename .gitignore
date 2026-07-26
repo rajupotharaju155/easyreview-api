@@ -40,6 +40,10 @@ lerna-debug.log*
 .env*
 !.env.example
 
+# Local GCP deploy env (keep *.env.example committed)
+deploy/environments/staging.env
+deploy/environments/production.env
+
 # temp directory
 .temp
 .tmp

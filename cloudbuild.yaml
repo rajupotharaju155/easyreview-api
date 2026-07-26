@@ -1,0 +1,25 @@
+# Build and push the API image to Artifact Registry.
+# Prefer: yarn deploy:staging | yarn deploy:production
+# (those scripts pass the right substitutions from deploy/environments/*.env)
+
+substitutions:
+  _REGION: asia-south1
+  _REPO: easyreview
+  _SERVICE: easyreview-api
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -18,7 +18,7 @@ yarn staging
 
 # Production (compiled)
 yarn build
-yarn prod
+yarn production
 ```
 
 Server starts at `http://localhost:3000`.
@@ -49,9 +49,8 @@ yarn migration:revert:prod
 | Script | Description |
 |--------|-------------|
 | `yarn staging` | Run with `NODE_ENV=staging` (watch mode) |
-| `yarn production` | Run with `NODE_ENV=production` |
 | `yarn build` | Build for production |
-| `yarn prod` | Run compiled production build |
+| `yarn production` | Run compiled production build |
 | `yarn lint` | Lint and fix TypeScript files |
 | `yarn migration:create --name=Name` | Create a new empty migration |
 | `yarn migration:run:staging` | Run migrations against staging |

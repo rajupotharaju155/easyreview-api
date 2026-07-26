@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -13,6 +15,7 @@ import { UsersModule } from './users/users.module';
 
 /**
  * Loads env file based on NODE_ENV.
+ * Cloud Run / Docker inject env vars directly, so the file is optional there.
  */
 function getEnvFilePath(): string {
   const nodeEnv = process.env.NODE_ENV;
@@ -36,12 +39,17 @@ function getEnvFilePath(): string {
   }
 }
 
+const envFilePath = getEnvFilePath();
+// K_SERVICE is set automatically on Cloud Run.
+const ignoreEnvFile =
+  Boolean(process.env.K_SERVICE) || !existsSync(envFilePath);
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: getEnvFilePath(),
-      ignoreEnvFile: false,
+      envFilePath,
+      ignoreEnvFile,
     }),
     CommonModule,
     DatabaseModule,

@@ -33,9 +33,9 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
-  const port = process.env.PORT ?? 3000;
-  await app.listen(port);
-  logger.log(`Server is running at http://localhost:${port}/`, 'Bootstrap', {
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`Server is running at http://0.0.0.0:${port}/`, 'Bootstrap', {
     port,
     environment: process.env.NODE_ENV || 'production',
   });
