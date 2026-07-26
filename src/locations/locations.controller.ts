@@ -12,9 +12,9 @@ import { Public } from '../common/decorators/public.decorator';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
+import { LocationWithScanSummaryDto } from './dto/location-with-scan-summary.dto';
 import { PublicLocationDto } from './dto/public-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
-import { Location } from './entities/location.entity';
 import { LocationsService } from './locations.service';
 
 @Controller('locations')
@@ -29,7 +29,7 @@ export class LocationsController {
   @Get()
   findAll(
     @Query() paginationDto: PaginationDto,
-  ): Promise<PaginatedResponseDto<Location>> {
+  ): Promise<PaginatedResponseDto<LocationWithScanSummaryDto>> {
     return this.locationsService.findAllPaginated(paginationDto);
   }
 
@@ -37,6 +37,12 @@ export class LocationsController {
   @Get('by-slug/:slug')
   findPublicBySlug(@Param('slug') slug: string): Promise<PublicLocationDto> {
     return this.locationsService.findLocationBySlug(slug);
+  }
+
+  @Public()
+  @Post(':id/redirect-to-google')
+  incrementRedirectToGoogle(@Param('id') locationId: string) {
+    return this.locationsService.incrementRedirectToGoogleCount(locationId);
   }
 
   @Get(':id')

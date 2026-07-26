@@ -14,6 +14,7 @@ import {
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { User } from '../../users/entities/user.entity';
 import { LocationMetric } from './location-metric.entity';
+import { LocationScanMetric } from './location-scan-metric.entity';
 import { Review } from './review.entity';
 
 @Entity('locations')
@@ -105,6 +106,9 @@ export class Location {
 
   @OneToMany(() => LocationMetric, (metric) => metric.location)
   metrics: LocationMetric[];
+
+  @OneToMany(() => LocationScanMetric, (metric) => metric.location)
+  scanMetrics: LocationScanMetric[];
 
   @OneToMany(() => Review, (review) => review.location)
   reviews: Review[];

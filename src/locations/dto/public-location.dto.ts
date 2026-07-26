@@ -1,4 +1,5 @@
 export class PublicLocationDto {
+  id: string;
   name: string;
   placeId: string;
   slug: string;

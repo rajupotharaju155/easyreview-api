@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { LocationsService } from '../locations/locations.service';
 import {
   ReviewSuggestionDto,
   ReviewSuggestionsResponseDto,
@@ -24,32 +25,35 @@ type GeminiSuggestion = {
 export class ReviewService {
   private gemini: GoogleGenerativeAI | null = null;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly locationsService: LocationsService,
+  ) {}
 
   async suggestReviews(
     dto: SuggestReviewsDto,
   ): Promise<ReviewSuggestionsResponseDto> {
-    if(process.env.NODE_ENV === 'development'){
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      return {
-        "suggestions": [
-            {
-                "text": "Expected this to be the best saloon in Gajwel, but my experience was very disappointing. The service was quite poor today.",
-                "language": "English",
-                "targetWordCount": 20
-            },
-            {
-                "text": "Gajwel lo unna CRUSH MENS BEAUTY PARLOUR & SALOON ki vellanu. Pedda ga emi baaledu. Friendly staff untaru ani vinnanu kaani ikkada service bilkul nachaledu. Good massage kosam vella kaani chala disappointing ga anipinchindi. Malli ikadiki vellanum anukovatledhu. Improvements avasaram.",
-                "language": "Telugu",
-                "targetWordCount": 40
-            },
-            {
-                "text": "I visited CRUSH MENS BEAUTY PARLOUR & SALOON in Gajwel expecting great service after hearing it was the best saloon around. Sadly, my experience was very unsatisfactory. I was hoping for friendly staff and a good massage, but the service was rushed and unprofessional. I hope the management takes customer feedback seriously and improves their quality of service soon.",
-                "language": "English",
-                "targetWordCount": 60
-            }
-        ]
-    }
+    if (process.env.NODE_ENV === 'development') {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const mockResponse = new ReviewSuggestionsResponseDto([
+        {
+          text: 'Expected this to be the best saloon in Gajwel, but my experience was very disappointing. The service was quite poor today.',
+          language: 'English',
+          targetWordCount: 20,
+        },
+        {
+          text: 'Gajwel lo unna CRUSH MENS BEAUTY PARLOUR & SALOON ki vellanu. Pedda ga emi baaledu. Friendly staff untaru ani vinnanu kaani ikkada service bilkul nachaledu. Good massage kosam vella kaani chala disappointing ga anipinchindi. Malli ikadiki vellanum anukovatledhu. Improvements avasaram.',
+          language: 'Telugu',
+          targetWordCount: 40,
+        },
+        {
+          text: 'I visited CRUSH MENS BEAUTY PARLOUR & SALOON in Gajwel expecting great service after hearing it was the best saloon around. Sadly, my experience was very unsatisfactory. I was hoping for friendly staff and a good massage, but the service was rushed and unprofessional. I hope the management takes customer feedback seriously and improves their quality of service soon.',
+          language: 'English',
+          targetWordCount: 60,
+        },
+      ]);
+      void this.locationsService.incrementAiReviewCount(dto.locationId);
+      return mockResponse;
     }
     const client = this.getGeminiClient();
     const languages = this.normalizeLanguages(dto.languages);
@@ -82,7 +86,9 @@ export class ReviewService {
     }
 
     const suggestions = this.parseSuggestions(rawText, assignedLanguages);
-    return new ReviewSuggestionsResponseDto(suggestions);
+    const response = new ReviewSuggestionsResponseDto(suggestions);
+    void this.locationsService.incrementAiReviewCount(dto.locationId);
+    return response;
   }
 
   private getGeminiClient(): GoogleGenerativeAI {

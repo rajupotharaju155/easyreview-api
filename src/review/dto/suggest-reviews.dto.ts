@@ -18,6 +18,10 @@ function emptyToUndefined({ value }: { value: unknown }): unknown {
 }
 
 export class SuggestReviewsDto {
+  @IsString()
+  @MinLength(1)
+  locationId: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

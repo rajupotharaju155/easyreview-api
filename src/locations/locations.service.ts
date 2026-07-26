@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -8,34 +9,54 @@ import { EntityManager, QueryFailedError, Repository, UpdateResult } from 'typeo
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
+import { generateId } from '../common/utils/id';
 import {
   slugCandidatesFromName,
   slugWithSuffix,
 } from '../common/utils/slug.util';
 import { CreateLocationDto } from './dto/create-location.dto';
+import { LocationWithScanSummaryDto } from './dto/location-with-scan-summary.dto';
 import { PublicLocationDto } from './dto/public-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import {
   LOCATION_METRIC_PERIOD_BASELINE,
   LocationMetric,
 } from './entities/location-metric.entity';
+import { LocationScanMetric } from './entities/location-scan-metric.entity';
 import { Location } from './entities/location.entity';
 import { Review } from './entities/review.entity';
 
+type ScanMetricField =
+  | 'scanCount'
+  | 'aiReviewCount'
+  | 'redirectToGoogleCount';
+
+type ScanSummaryRow = {
+  locationId: string;
+  totalScanCount: string;
+  todayScanCount: string;
+};
+
 @Injectable()
 export class LocationsService {
+  private readonly logger = new Logger(LocationsService.name);
+
   constructor(
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
+    @InjectRepository(LocationScanMetric)
+    private readonly scanMetricRepository: Repository<LocationScanMetric>,
     private readonly currentUserUtil: CurrentUserUtil,
   ) {}
 
-  async create(createLocationDto: CreateLocationDto): Promise<Location> {
+  async create(
+    createLocationDto: CreateLocationDto,
+  ): Promise<LocationWithScanSummaryDto> {
     const userId = this.currentUserUtil.getCurrentUserId();
     const capturedAt = new Date();
 
     try {
-      return await this.locationRepository.manager.transaction(
+      const savedLocation = await this.locationRepository.manager.transaction(
         async (manager) => {
           const slug = await this.allocateUniqueSlug(
             manager,
@@ -101,6 +122,8 @@ export class LocationsService {
           return savedLocation;
         },
       );
+
+      return this.withScanSummary(savedLocation);
     } catch (error) {
       if (this.isForeignKeyViolation(error)) {
         throw new NotFoundException(`User with id "${userId}" not found`);
@@ -152,7 +175,7 @@ export class LocationsService {
 
   async findAllPaginated(
     paginationDto: PaginationDto,
-  ): Promise<PaginatedResponseDto<Location>> {
+  ): Promise<PaginatedResponseDto<LocationWithScanSummaryDto>> {
     const userId = this.currentUserUtil.getCurrentUserId();
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
@@ -164,10 +187,11 @@ export class LocationsService {
       take: limit,
     });
 
-    return new PaginatedResponseDto(data, total, page, limit);
+    const withSummaries = await this.withScanSummaries(data);
+    return new PaginatedResponseDto(withSummaries, total, page, limit);
   }
 
-  async findOne(id: string): Promise<Location> {
+  async findOne(id: string): Promise<LocationWithScanSummaryDto> {
     const userId = this.currentUserUtil.getCurrentUserId();
     const location = await this.locationRepository.findOne({
       where: { id, userId },
@@ -177,13 +201,14 @@ export class LocationsService {
       throw new NotFoundException(`Location with id "${id}" not found`);
     }
 
-    return location;
+    return this.withScanSummary(location);
   }
 
   async findLocationBySlug(slug: string): Promise<PublicLocationDto> {
     const location = await this.locationRepository.findOne({
       where: { slug },
       select: [
+        'id',
         'name',
         'placeId',
         'slug',
@@ -198,7 +223,10 @@ export class LocationsService {
       throw new NotFoundException(`Location with slug "${slug}" not found`);
     }
 
+    void this.safeIncrementScanMetric(location.id, 'scanCount');
+
     return new PublicLocationDto({
+      id: location.id,
       name: location.name,
       placeId: location.placeId,
       slug: location.slug,
@@ -209,10 +237,138 @@ export class LocationsService {
     });
   }
 
+  async incrementAiReviewCount(locationId: string): Promise<void> {
+    void this.safeIncrementScanMetric(locationId, 'aiReviewCount');
+  }
+
+  async incrementRedirectToGoogleCount(
+    locationId: string,
+  ): Promise<LocationScanMetric> {
+    try {
+      return await this.incrementScanMetric(
+        locationId,
+        'redirectToGoogleCount',
+      );
+    } catch (error) {
+      if (this.isForeignKeyViolation(error)) {
+        throw new NotFoundException(
+          `Location with id "${locationId}" not found`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async safeIncrementScanMetric(
+    locationId: string,
+    field: ScanMetricField,
+  ): Promise<void> {
+    try {
+      await this.incrementScanMetric(locationId, field);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to increment ${field} for location ${locationId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async incrementScanMetric(
+    locationId: string,
+    field: ScanMetricField,
+  ): Promise<LocationScanMetric> {
+    const date = this.todayUtcDate();
+    const id = generateId();
+    const scanCount = field === 'scanCount' ? 1 : 0;
+    const aiReviewCount = field === 'aiReviewCount' ? 1 : 0;
+    const redirectToGoogleCount = field === 'redirectToGoogleCount' ? 1 : 0;
+
+    await this.scanMetricRepository.query(
+      `
+      INSERT INTO location_scan_metrics
+        (id, "locationId", "date", "scanCount", "aiReviewCount", "redirectToGoogleCount", "createdAt", "updatedAt")
+      VALUES
+        ($1, $2, $3::date, $4, $5, $6, NOW(), NOW())
+      ON CONFLICT ("locationId", "date")
+      DO UPDATE SET
+        "scanCount" = location_scan_metrics."scanCount" + EXCLUDED."scanCount",
+        "aiReviewCount" = location_scan_metrics."aiReviewCount" + EXCLUDED."aiReviewCount",
+        "redirectToGoogleCount" = location_scan_metrics."redirectToGoogleCount" + EXCLUDED."redirectToGoogleCount",
+        "updatedAt" = NOW()
+      `,
+      [id, locationId, date, scanCount, aiReviewCount, redirectToGoogleCount],
+    );
+
+    const metric = await this.scanMetricRepository.findOne({
+      where: { locationId, date },
+    });
+
+    if (!metric) {
+      throw new NotFoundException(
+        `Scan metrics for location "${locationId}" on ${date} not found after upsert`,
+      );
+    }
+
+    return metric;
+  }
+
+  private todayUtcDate(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private async withScanSummary(
+    location: Location,
+  ): Promise<LocationWithScanSummaryDto> {
+    const [enriched] = await this.withScanSummaries([location]);
+    return enriched;
+  }
+
+  private async withScanSummaries(
+    locations: Location[],
+  ): Promise<LocationWithScanSummaryDto[]> {
+    if (locations.length === 0) {
+      return [];
+    }
+
+    const ids = locations.map((location) => location.id);
+    const today = this.todayUtcDate();
+    const rows = await this.scanMetricRepository
+      .createQueryBuilder('m')
+      .select('m.locationId', 'locationId')
+      .addSelect('COALESCE(SUM(m.scanCount), 0)', 'totalScanCount')
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN m.date = :today::date THEN m.scanCount ELSE 0 END), 0)`,
+        'todayScanCount',
+      )
+      .where('m.locationId IN (:...ids)', { ids })
+      .setParameter('today', today)
+      .groupBy('m.locationId')
+      .getRawMany<ScanSummaryRow>();
+
+    const summaryByLocationId = new Map(
+      rows.map((row) => [
+        row.locationId,
+        {
+          totalScanCount: Number(row.totalScanCount) || 0,
+          todayScanCount: Number(row.todayScanCount) || 0,
+        },
+      ]),
+    );
+
+    return locations.map((location) => {
+      const summary = summaryByLocationId.get(location.id);
+      return Object.assign(location, {
+        totalScanCount: summary?.totalScanCount ?? 0,
+        todayScanCount: summary?.todayScanCount ?? 0,
+      });
+    });
+  }
+
   async update(
     id: string,
     updateLocationDto: UpdateLocationDto,
-  ): Promise<Location> {
+  ): Promise<LocationWithScanSummaryDto> {
     await this.findOne(id);
 
     const fields: Partial<Location> = {};
