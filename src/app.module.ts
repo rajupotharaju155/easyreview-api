@@ -13,6 +13,7 @@ import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { LocationsModule } from './locations/locations.module';
+import { OrdersModule } from './orders/orders.module';
 import { ReviewModule } from './review/review.module';
 import { UsersModule } from './users/users.module';
 
@@ -60,6 +61,7 @@ const ignoreEnvFile =
     HealthModule,
     UsersModule,
     LocationsModule,
+    OrdersModule,
     ReviewModule,
     EmailModule,
   ],
