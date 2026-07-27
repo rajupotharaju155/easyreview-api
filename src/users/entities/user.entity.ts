@@ -31,6 +31,17 @@ export class User {
   @Exclude()
   password: string;
 
+  @Column({ default: false })
+  emailVerified: boolean;
+
+  @Column({ type: 'varchar', nullable: true })
+  @Exclude()
+  emailVerificationOtp: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  @Exclude()
+  emailVerificationOtpExpiresAt: Date | null;
+
   @OneToMany(() => Location, (location) => location.user)
   locations: Location[];
 

@@ -12,7 +12,7 @@ export class EmailController {
   @Post('test-otp')
   async testOtpEmail(@Body() dto: TestOtpEmailDto) {
     const otp =
-      dto.otp?.trim() || String(Math.floor(100000 + Math.random() * 900000));
+      dto.otp?.trim() || String(Math.floor(1000 + Math.random() * 9000));
     await this.emailService.sendVerificationOtp(dto.email, otp);
 
     return {

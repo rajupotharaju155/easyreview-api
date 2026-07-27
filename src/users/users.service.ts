@@ -25,6 +25,9 @@ export class UsersService {
         email: createUserDto.email,
         name: createUserDto.name,
         password: hashedPassword,
+        emailVerified: false,
+        emailVerificationOtp: null,
+        emailVerificationOtpExpiresAt: null,
       });
       return await this.userRepository.save(user);
     } catch (error) {
@@ -53,6 +56,27 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { email } });
+  }
+
+  async setEmailVerificationOtp(
+    userId: string,
+    otp: string,
+    expiresAt: Date,
+  ): Promise<User> {
+    await this.userRepository.update(userId, {
+      emailVerificationOtp: otp,
+      emailVerificationOtpExpiresAt: expiresAt,
+    });
+    return this.findOne(userId);
+  }
+
+  async markEmailVerified(userId: string): Promise<User> {
+    await this.userRepository.update(userId, {
+      emailVerified: true,
+      emailVerificationOtp: null,
+      emailVerificationOtpExpiresAt: null,
+    });
+    return this.findOne(userId);
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {

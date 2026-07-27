@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { EmailVerifiedGuard } from './auth/guards/email-verified.guard';
 import { CommonModule } from './common/common.module';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 import { LoggerService } from './common/services/logger.service';
@@ -67,6 +68,10 @@ const ignoreEnvFile =
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: EmailVerifiedGuard,
     },
     {
       provide: APP_INTERCEPTOR,
