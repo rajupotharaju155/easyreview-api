@@ -5,7 +5,11 @@
  * cloud certs. Strip sslmode from the URL and apply SSL via TypeORM instead.
  * Cloud SQL Unix sockets (`host=/cloudsql/...`) do not need client SSL.
  */
+import { configurePgUtcTimestampParsers } from './pg-date-parsers';
+
 export function getPostgresConnectionOptions(databaseUrl: string) {
+  configurePgUtcTimestampParsers();
+
   const parsed = new URL(databaseUrl);
   const sslMode = parsed.searchParams.get('sslmode');
   const socketHost = parsed.searchParams.get('host');
@@ -20,5 +24,10 @@ export function getPostgresConnectionOptions(databaseUrl: string) {
     type: 'postgres' as const,
     url: parsed.toString(),
     ssl: wantsSsl ? { rejectUnauthorized: false } : false,
+    // App always reads/writes timestamps in UTC.
+    timezone: 'Z',
+    extra: {
+      options: '-c TimeZone=UTC',
+    },
   };
 }
