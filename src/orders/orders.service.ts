@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -8,6 +9,7 @@ import { Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
+import { EmailService } from '../email/email.service';
 import { Location } from '../locations/entities/location.entity';
 import {
   STANDEE_DESIGNS,
@@ -20,18 +22,21 @@ import { OrderStatus } from './enums/order-status.enum';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
     private readonly currentUserUtil: CurrentUserUtil,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
-    const userId = this.currentUserUtil.getCurrentUserId();
+    const user = this.currentUserUtil.getCurrentUser();
     const location = await this.locationRepository.findOne({
-      where: { id: createOrderDto.locationId, userId },
+      where: { id: createOrderDto.locationId, userId: user.id },
     });
     if (!location) {
       throw new NotFoundException(
@@ -44,7 +49,7 @@ export class OrdersService {
       location,
     );
     const order = this.orderRepository.create({
-      userId,
+      userId: user.id,
       locationId: location.id,
       designVariant: createOrderDto.designVariant,
       designName: design.name,
@@ -59,7 +64,16 @@ export class OrdersService {
       status: OrderStatus.PLACED,
       statusNote: null,
     });
-    return this.orderRepository.save(order);
+    const savedOrder = await this.orderRepository.save(order);
+    void this.sendOrderConfirmationEmail(savedOrder, user.email, user.name).catch(
+      (error: unknown) => {
+        this.logger.error(
+          `Failed to send order confirmation email for order ${savedOrder.id}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      },
+    );
+    return savedOrder;
   }
 
   async findAllPaginated(
@@ -86,6 +100,34 @@ export class OrdersService {
       throw new NotFoundException(`Order with id "${id}" not found`);
     }
     return order;
+  }
+
+  private async sendOrderConfirmationEmail(
+    order: Order,
+    email: string,
+    name: string | null,
+  ): Promise<void> {
+    const deliveryAddress = [
+      order.addressLine1,
+      order.addressLine2,
+      order.addressLine3,
+      order.pincode,
+    ]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(', ');
+    await this.emailService.sendOrderConfirmation(
+      email,
+      {
+        orderId: order.id,
+        designName: order.designName,
+        businessName: order.businessNameSnapshot,
+        amountInr: order.amountInr,
+        phoneNumber: order.phoneNumber,
+        deliveryAddress: deliveryAddress || 'Address on file',
+      },
+      name ?? undefined,
+    );
   }
 
   private resolveDeliveryAddress(

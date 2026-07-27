@@ -70,3 +70,73 @@ export function welcomeEmailHtml(businessName?: string): string {
     </p>
   `);
 }
+
+export type OrderConfirmationEmailDetails = {
+  orderId: string;
+  designName: string;
+  businessName: string;
+  amountInr: number;
+  phoneNumber: string;
+  deliveryAddress: string;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+export function orderConfirmationEmailHtml(
+  details: OrderConfirmationEmailDetails,
+): string {
+  const orderId = escapeHtml(details.orderId);
+  const designName = escapeHtml(details.designName);
+  const businessName = escapeHtml(details.businessName);
+  const phoneNumber = escapeHtml(details.phoneNumber);
+  const deliveryAddress = escapeHtml(details.deliveryAddress);
+
+  return emailShell(`
+    <h2 style="margin: 0 0 12px; font-size: 20px;">Order confirmed</h2>
+    <p style="margin: 0 0 16px; line-height: 1.5;">
+      Thanks for ordering your EasyReview standee. We&apos;ve received your order and our team will call you shortly to confirm the details.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; margin: 0 0 16px; font-size: 14px; line-height: 1.5;">
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; width: 120px; vertical-align: top;">Order ID</td>
+        <td style="padding: 6px 0; font-weight: 600;">${orderId}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Design</td>
+        <td style="padding: 6px 0; font-weight: 600;">${designName} standee</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Business</td>
+        <td style="padding: 6px 0; font-weight: 600;">${businessName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Amount</td>
+        <td style="padding: 6px 0; font-weight: 600;">₹${details.amountInr}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Phone</td>
+        <td style="padding: 6px 0; font-weight: 600;">${phoneNumber}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Deliver to</td>
+        <td style="padding: 6px 0; font-weight: 600;">${deliveryAddress}</td>
+      </tr>
+    </table>
+    <p style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.5;">
+      You can track this order anytime from the
+      <a
+        href="https://app.easyreview.co.in/orders"
+        style="color: #6b2fd5; text-decoration: none; font-weight: 600;"
+      >Orders page</a>
+      in your EasyReview dashboard.
+    </p>
+  `);
+}
+
