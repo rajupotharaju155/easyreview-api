@@ -6,8 +6,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { LoggerService } from '../common/services/logger.service';
 import {
+  orderConfirmationEmailHtml,
   verificationOtpEmailHtml,
   welcomeEmailHtml,
+  type OrderConfirmationEmailDetails,
 } from './templates/email.templates';
 
 const BREVO_SMTP_URL = 'https://api.brevo.com/v3/smtp/email';
@@ -45,6 +47,19 @@ export class EmailService {
       toName: businessName,
       subject: 'Welcome to EasyReview for small business',
       htmlContent: welcomeEmailHtml(businessName),
+    });
+  }
+
+  async sendOrderConfirmation(
+    email: string,
+    details: OrderConfirmationEmailDetails,
+    toName?: string,
+  ): Promise<void> {
+    await this.sendEmail({
+      toEmail: email,
+      toName,
+      subject: `Order confirmed · ${details.designName} standee`,
+      htmlContent: orderConfirmationEmailHtml(details),
     });
   }
 
