@@ -9,6 +9,7 @@ import { CommonModule } from './common/common.module';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 import { LoggerService } from './common/services/logger.service';
 import { DatabaseModule } from './database/database.module';
+import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { LocationsModule } from './locations/locations.module';
 import { ReviewModule } from './review/review.module';
@@ -59,6 +60,7 @@ const ignoreEnvFile =
     UsersModule,
     LocationsModule,
     ReviewModule,
+    EmailModule,
   ],
   controllers: [],
   providers: [
