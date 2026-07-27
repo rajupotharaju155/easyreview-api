@@ -106,6 +106,7 @@ export class AuthService {
   }
 
   private async issueAndSendVerificationOtp(user: User): Promise<void> {
+    try {
     const otp = generateOtp();
     const updated = await this.usersService.setEmailVerificationOtp(
       user.id,
@@ -113,5 +114,9 @@ export class AuthService {
       otpExpiresAt(),
     );
     await this.emailService.sendVerificationOtp(updated.email, otp);
+    } catch (error) {
+      console.error('Error sending verification OTP:', error);
+      throw error;
+    }
   }
 }
