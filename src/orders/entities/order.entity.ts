@@ -83,12 +83,12 @@ export class Order {
   statusNote: string | null;
 
   @CreateDateColumn({
-    type: 'timestamp',
+    type: 'timestamptz',
   })
   createdAt: Date;
 
   @UpdateDateColumn({
-    type: 'timestamp',
+    type: 'timestamptz',
   })
   updatedAt: Date;
 
