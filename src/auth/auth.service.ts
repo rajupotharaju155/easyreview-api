@@ -11,11 +11,13 @@ import {
   generateTokens,
   validatePassword,
 } from '../common/utils/token.util';
+import { LOGIN_AS_TOKEN_TYPE } from '../hq/hq.constants';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { LoginResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { JwtPayload } from './strategies/jwt.strategy';
 
 const OTP_EXPIRY_MINUTES = 10;
 
@@ -103,6 +105,25 @@ export class AuthService {
 
     await this.issueAndSendVerificationOtp(user);
     return { message: 'Verification code sent.' };
+  }
+
+  /**
+   * Exchanges a short-lived HQ login-as ticket for normal user session tokens.
+   */
+  async exchangeLoginAsTicket(ticket: string): Promise<LoginResponseDto> {
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(ticket.trim());
+    } catch {
+      throw new UnauthorizedException('Invalid or expired login-as ticket');
+    }
+    if (payload.type !== LOGIN_AS_TOKEN_TYPE || !payload.sub) {
+      throw new UnauthorizedException('Invalid or expired login-as ticket');
+    }
+    const user = await this.usersService.findOne(payload.sub);
+    console.log(`[INFO] Login-as ticket exchanged for user ${user.id}`);
+    //generate the token for user like how actually user is getting token
+    return generateTokens(user, this.jwtService, this.configService);
   }
 
   private async issueAndSendVerificationOtp(user: User): Promise<void> {

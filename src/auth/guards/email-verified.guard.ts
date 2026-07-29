@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { ALLOW_UNVERIFIED_KEY } from '../../common/decorators/allow-unverified.decorator';
+import { isHqAdmin } from '../../hq/hq-admin.interface';
 import { User } from '../../users/entities/user.entity';
 
 @Injectable()
@@ -32,6 +33,9 @@ export class EmailVerifiedGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<{ user?: User }>();
     const user = request.user;
+    if (isHqAdmin(user)) {
+      return true;
+    }
     if (!user?.emailVerified) {
       throw new ForbiddenException(
         'Please verify your email before accessing this resource.',

@@ -4,11 +4,17 @@ import { PassportStrategy } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Repository } from 'typeorm';
+import { HqAdmin } from '../../hq/hq-admin.interface';
+import {
+  HQ_TOKEN_TYPE,
+  LOGIN_AS_TOKEN_TYPE,
+} from '../../hq/hq.constants';
 import { User } from '../../users/entities/user.entity';
 
 export interface JwtPayload {
   sub: string;
   email: string;
+  type?: typeof HQ_TOKEN_TYPE | typeof LOGIN_AS_TOKEN_TYPE;
   iat?: number;
   exp?: number;
 }
@@ -32,8 +38,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<User> {
-    //Fetch user from db while authenticating the user
+  async validate(payload: JwtPayload): Promise<User | HqAdmin> {
+    if (payload.type === LOGIN_AS_TOKEN_TYPE) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    if (payload.type === HQ_TOKEN_TYPE) {
+      return {
+        id: payload.sub,
+        email: payload.email,
+        isHq: true,
+      };
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
     });
