@@ -11,17 +11,21 @@ import { ILike, Not, Repository } from 'typeorm';
 import { LoginResponseDto } from '../auth/dto/auth-response.dto';
 import { LoginDto } from '../auth/dto/login.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { generateHqTokens } from '../common/utils/token.util';
 import { Location } from '../locations/entities/location.entity';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
 import {
   HQ_ADMIN_EMAIL,
   HQ_ADMIN_PASSWORD,
+  LOGIN_AS_TICKET_EXPIRATION,
+  LOGIN_AS_TOKEN_TYPE,
 } from './hq.constants';
 
 @Injectable()
@@ -82,6 +86,23 @@ export class HqService {
       throw new NotFoundException(`User with id "${id}" not found`);
     }
     return user;
+  }
+
+  /**
+   * Mints a short-lived login-as ticket so HQ can open the user dashboard as this user.
+   */
+  async createLoginAsTicket(id: string): Promise<LoginAsTicketResponseDto> {
+    const user = await this.findUserById(id);
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      type: LOGIN_AS_TOKEN_TYPE,
+    };
+    const ticket = await this.jwtService.signAsync(payload, {
+      expiresIn: LOGIN_AS_TICKET_EXPIRATION,
+    });
+    console.log(`[INFO] HQ issued login-as ticket for user ${user.id}`);
+    return { ticket };
   }
 
   /**

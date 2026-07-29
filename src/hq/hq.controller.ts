@@ -19,6 +19,7 @@ import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
+import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
 import { HqGuard } from './guards/hq.guard';
 import { HqService } from './hq.service';
@@ -46,6 +47,15 @@ export class HqController {
   @Get('users/:id')
   async findUserById(@Param('id') id: string): Promise<User> {
     return this.hqService.findUserById(id);
+  }
+
+  @UseGuards(HqGuard)
+  @Post('users/:id/login-as')
+  @HttpCode(HttpStatus.OK)
+  async loginAsUser(
+    @Param('id') id: string,
+  ): Promise<LoginAsTicketResponseDto> {
+    return this.hqService.createLoginAsTicket(id);
   }
 
   @UseGuards(HqGuard)

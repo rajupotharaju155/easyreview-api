@@ -11,6 +11,7 @@ import { CurrentUser } from '../common/decorators/user.decorator';
 import { User } from '../users/entities/user.entity';
 import { AuthService } from './auth.service';
 import { LoginResponseDto } from './dto/auth-response.dto';
+import { ExchangeLoginAsDto } from './dto/exchange-login-as.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -30,6 +31,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.login(loginDto);
+  }
+
+  @Public()
+  @Post('login-as/exchange')
+  @HttpCode(HttpStatus.OK)
+  async exchangeLoginAs(
+    @Body() dto: ExchangeLoginAsDto,
+  ): Promise<LoginResponseDto> {
+    return this.authService.exchangeLoginAsTicket(dto.ticket);
   }
 
   @AllowUnverified()
