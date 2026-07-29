@@ -12,6 +12,7 @@ import { LoggerService } from './common/services/logger.service';
 import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
+import { HqModule } from './hq/hq.module';
 import { LocationsModule } from './locations/locations.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrivateFeedbackModule } from './private-feedback/private-feedback.module';
@@ -59,6 +60,7 @@ const ignoreEnvFile =
     CommonModule,
     DatabaseModule,
     AuthModule,
+    HqModule,
     HealthModule,
     UsersModule,
     LocationsModule,

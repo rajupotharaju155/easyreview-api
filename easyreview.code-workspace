@@ -10,7 +10,7 @@
 			"path": "../easyreview-ui"
 		},
 		{
-			"path": "../../AAAIntelligic/dutyflex-backend"
+			"path": "../easyreview-hq"
 		}
 	]
 }
