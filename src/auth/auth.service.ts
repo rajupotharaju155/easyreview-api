@@ -39,7 +39,7 @@ export class AuthService {
   async register(registerDto: RegisterDto): Promise<LoginResponseDto> {
     if (!validatePassword(registerDto.password)) {
       throw new BadRequestException(
-        'Password must be at least 8 characters and include uppercase, lowercase, number, and special character',
+        'Password must be at least 8 characters',
       );
     }
 
