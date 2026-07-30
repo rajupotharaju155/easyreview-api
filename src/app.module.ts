@@ -14,6 +14,7 @@ import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { HqModule } from './hq/hq.module';
+import { InternalJobsModule } from './internal-jobs/internal-jobs.module';
 import { LocationsModule } from './locations/locations.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrivateFeedbackModule } from './private-feedback/private-feedback.module';
@@ -63,6 +64,7 @@ const ignoreEnvFile =
     AuthModule,
     HqModule,
     HealthModule,
+    InternalJobsModule,
     UsersModule,
     LocationsModule,
     OrdersModule,
