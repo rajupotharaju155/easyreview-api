@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { EmailVerifiedGuard } from './auth/guards/email-verified.guard';
@@ -68,6 +69,7 @@ const ignoreEnvFile =
     PrivateFeedbackModule,
     ReviewModule,
     EmailModule,
+    AnalyticsModule,
   ],
   controllers: [],
   providers: [

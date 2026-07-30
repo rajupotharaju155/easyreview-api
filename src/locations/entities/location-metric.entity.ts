@@ -33,7 +33,7 @@ export class LocationMetric {
   @JoinColumn({ name: 'locationId' })
   location: Location;
 
-  /** e.g. baseline | 2026-07 */
+  /** e.g. baseline | 2026-07-30 */
   @Column({ type: 'varchar', length: 32 })
   periodKey: string;
 
