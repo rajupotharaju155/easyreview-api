@@ -14,6 +14,8 @@ import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { generateHqTokens } from '../common/utils/token.util';
 import { Location } from '../locations/entities/location.entity';
+import { LocationMetric } from '../locations/entities/location-metric.entity';
+import { LocationsService } from '../locations/locations.service';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
@@ -33,6 +35,7 @@ export class HqService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly locationsService: LocationsService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Location)
@@ -139,6 +142,17 @@ export class HqService {
       throw new NotFoundException(`Location with id "${id}" not found`);
     }
     return location;
+  }
+
+  /**
+   * Fetches latest Places API metrics for a location and stores a daily snapshot.
+   */
+  async refreshLocationMetrics(id: string): Promise<LocationMetric> {
+    const metric = await this.locationsService.refreshMetrics(id);
+    console.log(
+      `[INFO] HQ refreshed metrics for location ${id} (period ${metric.periodKey})`,
+    );
+    return metric;
   }
 
   /**

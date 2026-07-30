@@ -14,6 +14,7 @@ import { LoginDto } from '../auth/dto/login.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { Location } from '../locations/entities/location.entity';
+import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
@@ -70,6 +71,15 @@ export class HqController {
   @Get('locations/:id')
   async findLocationById(@Param('id') id: string): Promise<Location> {
     return this.hqService.findLocationById(id);
+  }
+
+  @UseGuards(HqGuard)
+  @Post('locations/:id/refresh-metrics')
+  @HttpCode(HttpStatus.OK)
+  async refreshLocationMetrics(
+    @Param('id') id: string,
+  ): Promise<LocationMetric> {
+    return this.hqService.refreshLocationMetrics(id);
   }
 
   @UseGuards(HqGuard)

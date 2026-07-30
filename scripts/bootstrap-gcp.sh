@@ -144,11 +144,13 @@ echo "  gcloud sql instances list --project=${GCP_PROJECT_ID} --format='value(co
 echo
 
 : "${GEMINI_API_KEY_SECRET:=GEMINI_API_KEY}"
+: "${GOOGLE_MAPS_API_KEY_SECRET:=GOOGLE_MAPS_API_KEY}"
 : "${BREVO_API_KEY_SECRET:=BREVO_API_KEY}"
 
 create_or_update_secret "${DATABASE_SECRET}" "Enter DATABASE_URL"
 create_or_update_secret "${JWT_SECRET_NAME}" "Enter JWT_SECRET"
 create_or_update_secret "${GEMINI_API_KEY_SECRET}" "Enter GEMINI_API_KEY"
+create_or_update_secret "${GOOGLE_MAPS_API_KEY_SECRET}" "Enter GOOGLE_MAPS_API_KEY"
 create_or_update_secret "${BREVO_API_KEY_SECRET}" "Enter BREVO_API_KEY"
 
 # ---------------------------------------------------------------------------
@@ -187,6 +189,7 @@ grant_project_role "serviceAccount:${RUNTIME_SA}" "roles/artifactregistry.reader
 grant_secret_accessor "${DATABASE_SECRET}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${JWT_SECRET_NAME}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${GEMINI_API_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
+grant_secret_accessor "${GOOGLE_MAPS_API_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${BREVO_API_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
 
 # ---------------------------------------------------------------------------
@@ -203,7 +206,7 @@ else
   echo "  ✓ CLOUD_SQL_INSTANCE=${CLOUD_SQL_INSTANCE}"
 fi
 
-for secret_id in "${DATABASE_SECRET}" "${JWT_SECRET_NAME}" "${GEMINI_API_KEY_SECRET}" "${BREVO_API_KEY_SECRET}"; do
+for secret_id in "${DATABASE_SECRET}" "${JWT_SECRET_NAME}" "${GEMINI_API_KEY_SECRET}" "${GOOGLE_MAPS_API_KEY_SECRET}" "${BREVO_API_KEY_SECRET}"; do
   if gcloud secrets describe "${secret_id}" --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
     echo "  ✓ Secret ${secret_id} exists"
   else

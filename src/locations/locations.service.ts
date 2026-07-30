@@ -25,6 +25,7 @@ import {
 import { LocationScanMetric } from './entities/location-scan-metric.entity';
 import { Location } from './entities/location.entity';
 import { Review } from './entities/review.entity';
+import { GooglePlacesService } from '../services/google-places.service';
 
 type ScanMetricField =
   | 'scanCount'
@@ -46,6 +47,9 @@ export class LocationsService {
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(LocationScanMetric)
     private readonly scanMetricRepository: Repository<LocationScanMetric>,
+    @InjectRepository(LocationMetric)
+    private readonly locationMetricRepository: Repository<LocationMetric>,
+    private readonly googlePlacesService: GooglePlacesService,
     private readonly currentUserUtil: CurrentUserUtil,
   ) {}
 
@@ -202,6 +206,60 @@ export class LocationsService {
     }
 
     return this.withScanSummary(location);
+  }
+
+  async refreshMetrics(id: string): Promise<LocationMetric> {
+    const location = await this.locationRepository.findOne({
+      where: { id },
+    });
+
+    if (!location) {
+      throw new NotFoundException(`Location with id "${id}" not found`);
+    }
+
+    const placeDetails = await this.googlePlacesService.fetchPlaceDetails(
+      location.placeId,
+    );
+    const capturedAt = new Date();
+    const periodKey = this.currentMetricPeriodKey(capturedAt);
+
+    let metric = await this.locationMetricRepository.findOne({
+      where: { locationId: location.id, periodKey },
+    });
+
+    if (metric) {
+      metric.capturedAt = capturedAt;
+      metric.source = 'places_api';
+      metric.rating = placeDetails.rating;
+      metric.reviewCount = placeDetails.userRatingCount;
+    } else {
+      metric = this.locationMetricRepository.create({
+        locationId: location.id,
+        periodKey,
+        capturedAt,
+        source: 'places_api',
+        rating: placeDetails.rating,
+        reviewCount: placeDetails.userRatingCount,
+      });
+    }
+
+    const savedMetric = await this.locationMetricRepository.save(metric);
+
+    await this.locationRepository.update(location.id, {
+      currentRating: placeDetails.rating,
+      currentReviewCount: placeDetails.userRatingCount,
+      metricsCapturedAt: capturedAt,
+    });
+
+    return savedMetric;
+  }
+
+  /** Daily snapshot key, e.g. 2026-07-30 */
+  private currentMetricPeriodKey(date: Date): string {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   async findLocationBySlug(slug: string): Promise<PublicLocationDto> {

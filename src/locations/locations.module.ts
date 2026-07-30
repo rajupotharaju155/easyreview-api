@@ -4,6 +4,7 @@ import { LocationMetric } from './entities/location-metric.entity';
 import { LocationScanMetric } from './entities/location-scan-metric.entity';
 import { Location } from './entities/location.entity';
 import { Review } from './entities/review.entity';
+import { GooglePlacesService } from '../services/google-places.service';
 import { LocationsController } from './locations.controller';
 import { LocationsService } from './locations.service';
 
@@ -17,7 +18,7 @@ import { LocationsService } from './locations.service';
     ]),
   ],
   controllers: [LocationsController],
-  providers: [LocationsService],
+  providers: [LocationsService, GooglePlacesService],
   exports: [LocationsService],
 })
 export class LocationsModule {}
