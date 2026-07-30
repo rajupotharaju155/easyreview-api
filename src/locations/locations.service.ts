@@ -254,6 +254,51 @@ export class LocationsService {
     return savedMetric;
   }
 
+  /**
+   * Refreshes Places metrics for every location. Continues on per-location errors
+   * so one bad placeId cannot abort the scheduled job.
+   */
+  async refreshAllMetrics(): Promise<{
+    total: number;
+    succeeded: number;
+    failed: number;
+    failures: Array<{ locationId: string; error: string }>;
+  }> {
+    const locations = await this.locationRepository.find({
+      select: ['id'],
+    });
+
+    let succeeded = 0;
+    let failed = 0;
+    const failures: Array<{ locationId: string; error: string }> = [];
+
+    for (const location of locations) {
+      try {
+        await this.refreshMetrics(location.id);
+        succeeded += 1;
+      } catch (error) {
+        failed += 1;
+        const message =
+          error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to refresh metrics for location ${location.id}: ${message}`,
+        );
+        failures.push({ locationId: location.id, error: message });
+      }
+    }
+
+    this.logger.log(
+      `refreshAllMetrics finished: total=${locations.length} succeeded=${succeeded} failed=${failed}`,
+    );
+
+    return {
+      total: locations.length,
+      succeeded,
+      failed,
+      failures,
+    };
+  }
+
   /** Daily snapshot key, e.g. 2026-07-30 */
   private currentMetricPeriodKey(date: Date): string {
     const year = date.getUTCFullYear();

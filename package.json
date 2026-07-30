@@ -32,6 +32,8 @@
     "docker:run": "docker run --rm -p 8080:8080 -e NODE_ENV=production --env-file .env.production easyreview-api:local",
     "gcp:bootstrap:staging": "bash scripts/bootstrap-gcp.sh staging",
     "gcp:bootstrap:production": "bash scripts/bootstrap-gcp.sh production",
+    "gcp:scheduler:staging": "bash scripts/setup-scheduler.sh staging",
+    "gcp:scheduler:production": "bash scripts/setup-scheduler.sh production",
     "deploy:staging": "bash scripts/deploy-cloud-run.sh staging",
     "deploy:production": "bash scripts/deploy-cloud-run.sh production"
   },

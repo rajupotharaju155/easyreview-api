@@ -115,6 +115,7 @@ gcloud services enable \
   sqladmin.googleapis.com \
   storage.googleapis.com \
   iam.googleapis.com \
+  cloudscheduler.googleapis.com \
   --project "${GCP_PROJECT_ID}"
 
 # ---------------------------------------------------------------------------
@@ -146,12 +147,14 @@ echo
 : "${GEMINI_API_KEY_SECRET:=GEMINI_API_KEY}"
 : "${GOOGLE_MAPS_API_KEY_SECRET:=GOOGLE_MAPS_API_KEY}"
 : "${BREVO_API_KEY_SECRET:=BREVO_API_KEY}"
+: "${CRON_SECRET_NAME:=CRON_SECRET}"
 
 create_or_update_secret "${DATABASE_SECRET}" "Enter DATABASE_URL"
 create_or_update_secret "${JWT_SECRET_NAME}" "Enter JWT_SECRET"
 create_or_update_secret "${GEMINI_API_KEY_SECRET}" "Enter GEMINI_API_KEY"
 create_or_update_secret "${GOOGLE_MAPS_API_KEY_SECRET}" "Enter GOOGLE_MAPS_API_KEY"
 create_or_update_secret "${BREVO_API_KEY_SECRET}" "Enter BREVO_API_KEY"
+create_or_update_secret "${CRON_SECRET_NAME}" "Enter CRON_SECRET (long random string for Cloud Scheduler)"
 
 # ---------------------------------------------------------------------------
 # 4) IAM — Cloud Build (source bucket + image push)
@@ -191,6 +194,7 @@ grant_secret_accessor "${JWT_SECRET_NAME}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${GEMINI_API_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${GOOGLE_MAPS_API_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${BREVO_API_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
+grant_secret_accessor "${CRON_SECRET_NAME}" "serviceAccount:${RUNTIME_SA}"
 
 # ---------------------------------------------------------------------------
 # 6) Preflight checks
@@ -206,7 +210,7 @@ else
   echo "  ✓ CLOUD_SQL_INSTANCE=${CLOUD_SQL_INSTANCE}"
 fi
 
-for secret_id in "${DATABASE_SECRET}" "${JWT_SECRET_NAME}" "${GEMINI_API_KEY_SECRET}" "${GOOGLE_MAPS_API_KEY_SECRET}" "${BREVO_API_KEY_SECRET}"; do
+for secret_id in "${DATABASE_SECRET}" "${JWT_SECRET_NAME}" "${GEMINI_API_KEY_SECRET}" "${GOOGLE_MAPS_API_KEY_SECRET}" "${BREVO_API_KEY_SECRET}" "${CRON_SECRET_NAME}"; do
   if gcloud secrets describe "${secret_id}" --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
     echo "  ✓ Secret ${secret_id} exists"
   else
@@ -224,3 +228,4 @@ fi
 echo "Bootstrap complete for ${DEPLOY_ENV_NAME}."
 echo "Next:"
 echo "  yarn deploy:${DEPLOY_ENV_NAME}"
+echo "  yarn gcp:scheduler:${DEPLOY_ENV_NAME}"
