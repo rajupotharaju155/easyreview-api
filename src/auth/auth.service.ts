@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { OAuth2Client } from 'google-auth-library';
 import { EmailService } from '../email/email.service';
 import {
   comparePassword,
@@ -31,12 +32,18 @@ function otpExpiresAt(): Date {
 
 @Injectable()
 export class AuthService {
+  private readonly googleClient: OAuth2Client;
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
-  ) {}
+  ) {
+    this.googleClient = new OAuth2Client(
+      this.configService.get<string>('GOOGLE_OAUTH_CLIENT_ID'),
+    );
+  }
 
   async register(registerDto: RegisterDto): Promise<LoginResponseDto> {
     if (!validatePassword(registerDto.password)) {
@@ -57,6 +64,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.password) {
+      throw new UnauthorizedException(
+        'This account uses Google sign-in. Please continue with Google.',
+      );
+    }
+
     const isPasswordValid = await comparePassword(
       loginDto.password,
       user.password,
@@ -65,6 +78,85 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    return generateTokens(user, this.jwtService, this.configService);
+  }
+
+  /**
+   * Verifies a Google ID token from GIS, then creates or links the user and
+   * returns the same JWT pair as email/password login.
+   */
+  async loginWithGoogle(idToken: string): Promise<LoginResponseDto> {
+    const clientId = this.configService
+      .get<string>('GOOGLE_OAUTH_CLIENT_ID')
+      ?.trim();
+    if (!clientId) {
+      throw new BadRequestException('Google sign-in is not configured');
+    }
+
+    let email: string;
+    let googleSub: string;
+    let name: string | null;
+
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: idToken.trim(),
+        audience: clientId,
+      });
+      const payload = ticket.getPayload();
+      if (!payload?.sub || !payload.email) {
+        throw new UnauthorizedException('Invalid Google token');
+      }
+      if (payload.email_verified === false) {
+        throw new UnauthorizedException('Google email is not verified');
+      }
+      email = payload.email.toLowerCase();
+      googleSub = payload.sub;
+      name = payload.name?.trim() || null;
+    } catch (error) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new UnauthorizedException('Invalid Google token');
+    }
+
+    let user = await this.usersService.findByGoogleSub(googleSub);
+    //if user is not found, then check if the email is already in use
+    if (!user) {
+      //if email is already in use, then throw an error
+      const existingByEmail = await this.usersService.findByEmail(email);
+      if (existingByEmail) {
+        //if the email is already in use, then check if the google sub is already linked to the email
+        if (
+          existingByEmail.googleSub &&
+          existingByEmail.googleSub !== googleSub
+        ) {
+          //if the google sub is already linked to the email, then throw an error
+          throw new UnauthorizedException('Unable to sign in with Google');
+        }
+        //if the google sub is not linked to the email, then link the google sub to the email
+        user = await this.usersService.linkGoogleAccount(
+          existingByEmail.id,
+          googleSub,
+          name,
+        );
+      } else {
+        //if the email is not in use, then create a new user
+        user = await this.usersService.createFromGoogle({
+          email,
+          name,
+          googleSub,
+        });
+        void this.emailService
+          .sendWelcome(user.email, user.name ?? undefined)
+          .catch(() => {
+            // Welcome email is best-effort for new Google users.
+          });
+      }
+    }
+    //if user is found, then return the token
     return generateTokens(user, this.jwtService, this.configService);
   }
 

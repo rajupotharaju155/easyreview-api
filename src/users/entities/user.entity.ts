@@ -24,12 +24,16 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column({ nullable: true })
-  name: string;
+  @Column({ type: 'varchar', nullable: true })
+  name: string | null;
 
-  @Column()
+  @Column({ type: 'varchar', nullable: true })
   @Exclude()
-  password: string;
+  password: string | null;
+
+  /** Google account subject (`sub`) when the user signed in with Google. */
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  googleSub: string | null;
 
   @Column({ default: false })
   emailVerified: boolean;
