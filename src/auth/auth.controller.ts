@@ -12,6 +12,7 @@ import { User } from '../users/entities/user.entity';
 import { AuthService } from './auth.service';
 import { LoginResponseDto } from './dto/auth-response.dto';
 import { ExchangeLoginAsDto } from './dto/exchange-login-as.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -31,6 +32,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.login(loginDto);
+  }
+
+  @Public()
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async googleAuth(@Body() dto: GoogleAuthDto): Promise<LoginResponseDto> {
+    return this.authService.loginWithGoogle(dto.idToken);
   }
 
   @Public()

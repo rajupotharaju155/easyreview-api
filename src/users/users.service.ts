@@ -58,6 +58,55 @@ export class UsersService {
     return this.userRepository.findOne({ where: { email } });
   }
 
+  async findByGoogleSub(googleSub: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { googleSub } });
+  }
+
+  async createFromGoogle(data: {
+    email: string;
+    name: string | null;
+    googleSub: string;
+  }): Promise<User> {
+    try {
+      const user = this.userRepository.create({
+        email: data.email,
+        name: data.name,
+        password: null,
+        googleSub: data.googleSub,
+        emailVerified: true,
+        emailVerificationOtp: null,
+        emailVerificationOtpExpiresAt: null,
+      });
+      return await this.userRepository.save(user);
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        throw new ConflictException('Email already in use');
+      }
+      throw error;
+    }
+  }
+
+  async linkGoogleAccount(
+    userId: string,
+    googleSub: string,
+    name?: string | null,
+  ): Promise<User> {
+    const fields: Partial<User> = {
+      googleSub,
+      emailVerified: true,
+      emailVerificationOtp: null,
+      emailVerificationOtpExpiresAt: null,
+    };
+    if (name) {
+      const existing = await this.findOne(userId);
+      if (!existing.name) {
+        fields.name = name;
+      }
+    }
+    await this.userRepository.update(userId, fields);
+    return this.findOne(userId);
+  }
+
   async setEmailVerificationOtp(
     userId: string,
     otp: string,

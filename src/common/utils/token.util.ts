@@ -19,8 +19,11 @@ export async function generateHashPassword(password: string): Promise<string> {
 
 export async function comparePassword(
   plainPassword: string,
-  hashedPassword: string,
+  hashedPassword: string | null,
 ): Promise<boolean> {
+  if (!hashedPassword) {
+    return false;
+  }
   return bcrypt.compare(plainPassword, hashedPassword);
 }
 
