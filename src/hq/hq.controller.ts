@@ -20,6 +20,7 @@ import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
@@ -82,6 +83,15 @@ export class HqController {
     @Param('id') id: string,
   ): Promise<LocationMetric> {
     return this.hqService.refreshLocationMetrics(id);
+  }
+
+  @UseGuards(HqGuard)
+  @Patch('locations/:id/slug')
+  async updateLocationSlug(
+    @Param('id') id: string,
+    @Body() dto: HqUpdateLocationSlugDto,
+  ): Promise<Location> {
+    return this.hqService.updateLocationSlug(id, dto);
   }
 
   @UseGuards(HqGuard)

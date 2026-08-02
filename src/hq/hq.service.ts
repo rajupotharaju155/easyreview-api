@@ -21,6 +21,7 @@ import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
@@ -158,6 +159,32 @@ export class HqService {
       `[INFO] HQ refreshed metrics for location ${id} (period ${metric.periodKey})`,
     );
     return metric;
+  }
+
+  /**
+   * Updates a location slug for HQ, ensuring uniqueness.
+   */
+  async updateLocationSlug(
+    id: string,
+    dto: HqUpdateLocationSlugDto,
+  ): Promise<Location> {
+    const location = await this.findLocationById(id);
+    const slug = dto.slug.trim().toLowerCase();
+    if (location.slug === slug) {
+      return location;
+    }
+    const existing = await this.locationRepository.findOne({
+      where: { slug, id: Not(id) },
+      withDeleted: true,
+      select: ['id'],
+    });
+    if (existing) {
+      throw new ConflictException(`Slug "${slug}" is already in use`);
+    }
+    location.slug = slug;
+    const saved = await this.locationRepository.save(location);
+    console.log(`[INFO] HQ updated location ${id} slug to ${slug}`);
+    return saved;
   }
 
   /**
