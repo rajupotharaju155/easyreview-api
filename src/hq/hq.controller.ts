@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -19,6 +20,8 @@ import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
+import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
@@ -83,6 +86,15 @@ export class HqController {
   }
 
   @UseGuards(HqGuard)
+  @Patch('locations/:id/slug')
+  async updateLocationSlug(
+    @Param('id') id: string,
+    @Body() dto: HqUpdateLocationSlugDto,
+  ): Promise<Location> {
+    return this.hqService.updateLocationSlug(id, dto);
+  }
+
+  @UseGuards(HqGuard)
   @Post('locations/:id/transfer')
   @HttpCode(HttpStatus.OK)
   async transferLocation(
@@ -98,5 +110,20 @@ export class HqController {
     @Query() query: HqOrdersQueryDto,
   ): Promise<PaginatedResponseDto<Order>> {
     return this.hqService.findOrders(query);
+  }
+
+  @UseGuards(HqGuard)
+  @Get('orders/:id')
+  async findOrderById(@Param('id') id: string): Promise<Order> {
+    return this.hqService.findOrderById(id);
+  }
+
+  @UseGuards(HqGuard)
+  @Patch('orders/:id')
+  async updateOrder(
+    @Param('id') id: string,
+    @Body() dto: HqUpdateOrderDto,
+  ): Promise<Order> {
+    return this.hqService.updateOrder(id, dto);
   }
 }

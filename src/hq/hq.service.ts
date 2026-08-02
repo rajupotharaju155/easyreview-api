@@ -16,10 +16,13 @@ import { generateHqTokens } from '../common/utils/token.util';
 import { Location } from '../locations/entities/location.entity';
 import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { LocationsService } from '../locations/locations.service';
+import { STANDEE_DESIGNS } from '../orders/constants/standee.constants';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
+import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
@@ -110,20 +113,23 @@ export class HqService {
 
   /**
    * Lists all locations globally; search matches id, placeId, or name.
+   * Optional userId filters to locations managed by that agency user.
    */
   async findLocations(
     query: HqLocationsQueryDto,
   ): Promise<PaginatedResponseDto<Location>> {
-    const { page = 1, limit = 10, search } = query;
+    const { page = 1, limit = 10, search, userId } = query;
     const skip = (page - 1) * limit;
     const term = search?.trim();
+    const ownerId = userId?.trim();
+    const ownerFilter = ownerId ? { userId: ownerId } : {};
     const where = term
       ? [
-          { id: ILike(`%${term}%`) },
-          { placeId: ILike(`%${term}%`) },
-          { name: ILike(`%${term}%`) },
+          { id: ILike(`%${term}%`), ...ownerFilter },
+          { placeId: ILike(`%${term}%`), ...ownerFilter },
+          { name: ILike(`%${term}%`), ...ownerFilter },
         ]
-      : {};
+      : ownerFilter;
     const [data, total] = await this.locationRepository.findAndCount({
       where,
       order: { createdAt: 'DESC' },
@@ -153,6 +159,32 @@ export class HqService {
       `[INFO] HQ refreshed metrics for location ${id} (period ${metric.periodKey})`,
     );
     return metric;
+  }
+
+  /**
+   * Updates a location slug for HQ, ensuring uniqueness.
+   */
+  async updateLocationSlug(
+    id: string,
+    dto: HqUpdateLocationSlugDto,
+  ): Promise<Location> {
+    const location = await this.findLocationById(id);
+    const slug = dto.slug.trim().toLowerCase();
+    if (location.slug === slug) {
+      return location;
+    }
+    const existing = await this.locationRepository.findOne({
+      where: { slug, id: Not(id) },
+      withDeleted: true,
+      select: ['id'],
+    });
+    if (existing) {
+      throw new ConflictException(`Slug "${slug}" is already in use`);
+    }
+    location.slug = slug;
+    const saved = await this.locationRepository.save(location);
+    console.log(`[INFO] HQ updated location ${id} slug to ${slug}`);
+    return saved;
   }
 
   /**
@@ -221,5 +253,36 @@ export class HqService {
     }
     const [data, total] = await qb.getManyAndCount();
     return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  /**
+   * Returns a single order by id for HQ detail view.
+   */
+  async findOrderById(id: string): Promise<Order> {
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) {
+      throw new NotFoundException(`Order with id "${id}" not found`);
+    }
+    return order;
+  }
+
+  /**
+   * Updates editable order fields for HQ (design, contact, address, status).
+   */
+  async updateOrder(id: string, dto: HqUpdateOrderDto): Promise<Order> {
+    const order = await this.findOrderById(id);
+    const design = STANDEE_DESIGNS[dto.designVariant];
+    order.designVariant = dto.designVariant;
+    order.designName = design.name;
+    order.phoneNumber = dto.phoneNumber.trim();
+    order.addressLine1 = dto.addressLine1?.trim() || null;
+    order.addressLine2 = dto.addressLine2?.trim() || null;
+    order.addressLine3 = dto.addressLine3?.trim() || null;
+    order.pincode = dto.pincode?.trim() || null;
+    order.status = dto.status;
+    order.statusNote = dto.statusNote?.trim() || null;
+    const saved = await this.orderRepository.save(order);
+    console.log(`[INFO] HQ updated order ${id} (status ${saved.status})`);
+    return saved;
   }
 }
