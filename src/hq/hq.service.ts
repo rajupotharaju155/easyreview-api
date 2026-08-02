@@ -110,20 +110,23 @@ export class HqService {
 
   /**
    * Lists all locations globally; search matches id, placeId, or name.
+   * Optional userId filters to locations managed by that agency user.
    */
   async findLocations(
     query: HqLocationsQueryDto,
   ): Promise<PaginatedResponseDto<Location>> {
-    const { page = 1, limit = 10, search } = query;
+    const { page = 1, limit = 10, search, userId } = query;
     const skip = (page - 1) * limit;
     const term = search?.trim();
+    const ownerId = userId?.trim();
+    const ownerFilter = ownerId ? { userId: ownerId } : {};
     const where = term
       ? [
-          { id: ILike(`%${term}%`) },
-          { placeId: ILike(`%${term}%`) },
-          { name: ILike(`%${term}%`) },
+          { id: ILike(`%${term}%`), ...ownerFilter },
+          { placeId: ILike(`%${term}%`), ...ownerFilter },
+          { name: ILike(`%${term}%`), ...ownerFilter },
         ]
-      : {};
+      : ownerFilter;
     const [data, total] = await this.locationRepository.findAndCount({
       where,
       order: { createdAt: 'DESC' },

@@ -6,4 +6,9 @@ export class HqLocationsQueryDto extends PaginationDto {
   @IsString()
   @MinLength(1)
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  userId?: string;
 }
