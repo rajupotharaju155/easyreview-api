@@ -16,10 +16,12 @@ import { generateHqTokens } from '../common/utils/token.util';
 import { Location } from '../locations/entities/location.entity';
 import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { LocationsService } from '../locations/locations.service';
+import { STANDEE_DESIGNS } from '../orders/constants/standee.constants';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
@@ -224,5 +226,36 @@ export class HqService {
     }
     const [data, total] = await qb.getManyAndCount();
     return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  /**
+   * Returns a single order by id for HQ detail view.
+   */
+  async findOrderById(id: string): Promise<Order> {
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) {
+      throw new NotFoundException(`Order with id "${id}" not found`);
+    }
+    return order;
+  }
+
+  /**
+   * Updates editable order fields for HQ (design, contact, address, status).
+   */
+  async updateOrder(id: string, dto: HqUpdateOrderDto): Promise<Order> {
+    const order = await this.findOrderById(id);
+    const design = STANDEE_DESIGNS[dto.designVariant];
+    order.designVariant = dto.designVariant;
+    order.designName = design.name;
+    order.phoneNumber = dto.phoneNumber.trim();
+    order.addressLine1 = dto.addressLine1?.trim() || null;
+    order.addressLine2 = dto.addressLine2?.trim() || null;
+    order.addressLine3 = dto.addressLine3?.trim() || null;
+    order.pincode = dto.pincode?.trim() || null;
+    order.status = dto.status;
+    order.statusNote = dto.statusNote?.trim() || null;
+    const saved = await this.orderRepository.save(order);
+    console.log(`[INFO] HQ updated order ${id} (status ${saved.status})`);
+    return saved;
   }
 }
