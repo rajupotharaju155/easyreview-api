@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { LoggerService } from '../common/services/logger.service';
 import {
+  adminOrderReceivedEmailHtml,
   orderConfirmationEmailHtml,
   verificationOtpEmailHtml,
   welcomeEmailHtml,
@@ -17,6 +18,7 @@ const DEFAULT_SENDER = {
   name: 'EasyReview',
   email: 'no-reply@easyreview.co.in',
 };
+const ADMIN_ORDER_NOTIFY_EMAIL = 'raju@easyreview.co.in';
 
 type BrevoSendPayload = {
   toEmail: string;
@@ -60,6 +62,16 @@ export class EmailService {
       toName,
       subject: `Order confirmed · ${details.designName} standee`,
       htmlContent: orderConfirmationEmailHtml(details),
+    });
+  }
+
+  async sendAdminOrderReceived(
+    details: OrderConfirmationEmailDetails,
+  ): Promise<void> {
+    await this.sendEmail({
+      toEmail: ADMIN_ORDER_NOTIFY_EMAIL,
+      subject: `New order received · ${details.businessName}`,
+      htmlContent: adminOrderReceivedEmailHtml(details),
     });
   }
 
