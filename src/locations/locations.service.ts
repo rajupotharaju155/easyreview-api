@@ -36,6 +36,8 @@ type ScanSummaryRow = {
   locationId: string;
   totalScanCount: string;
   todayScanCount: string;
+  totalRedirectToGoogleCount: string;
+  totalAiReviewCount: string;
 };
 
 @Injectable()
@@ -444,6 +446,11 @@ export class LocationsService {
         `COALESCE(SUM(CASE WHEN m.date = :today::date THEN m.scanCount ELSE 0 END), 0)`,
         'todayScanCount',
       )
+      .addSelect(
+        'COALESCE(SUM(m.redirectToGoogleCount), 0)',
+        'totalRedirectToGoogleCount',
+      )
+      .addSelect('COALESCE(SUM(m.aiReviewCount), 0)', 'totalAiReviewCount')
       .where('m.locationId IN (:...ids)', { ids })
       .setParameter('today', today)
       .groupBy('m.locationId')
@@ -455,6 +462,9 @@ export class LocationsService {
         {
           totalScanCount: Number(row.totalScanCount) || 0,
           todayScanCount: Number(row.todayScanCount) || 0,
+          totalRedirectToGoogleCount:
+            Number(row.totalRedirectToGoogleCount) || 0,
+          totalAiReviewCount: Number(row.totalAiReviewCount) || 0,
         },
       ]),
     );
@@ -464,6 +474,8 @@ export class LocationsService {
       return Object.assign(location, {
         totalScanCount: summary?.totalScanCount ?? 0,
         todayScanCount: summary?.todayScanCount ?? 0,
+        totalRedirectToGoogleCount: summary?.totalRedirectToGoogleCount ?? 0,
+        totalAiReviewCount: summary?.totalAiReviewCount ?? 0,
       });
     });
   }
