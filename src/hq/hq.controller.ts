@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -22,6 +23,7 @@ import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
+import { HqUpdateUserDto } from './dto/hq-update-user.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
@@ -54,6 +56,21 @@ export class HqController {
   }
 
   @UseGuards(HqGuard)
+  @Patch('users/:id')
+  async updateUser(
+    @Param('id') id: string,
+    @Body() dto: HqUpdateUserDto,
+  ): Promise<User> {
+    return this.hqService.updateUser(id, dto);
+  }
+
+  @UseGuards(HqGuard)
+  @Delete('users/:id')
+  async deleteUser(@Param('id') id: string): Promise<User> {
+    return this.hqService.deleteUser(id);
+  }
+
+  @UseGuards(HqGuard)
   @Post('users/:id/login-as')
   @HttpCode(HttpStatus.OK)
   async loginAsUser(
@@ -74,6 +91,12 @@ export class HqController {
   @Get('locations/:id')
   async findLocationById(@Param('id') id: string): Promise<Location> {
     return this.hqService.findLocationById(id);
+  }
+
+  @UseGuards(HqGuard)
+  @Delete('locations/:id')
+  async deleteLocation(@Param('id') id: string): Promise<Location> {
+    return this.hqService.deleteLocation(id);
   }
 
   @UseGuards(HqGuard)

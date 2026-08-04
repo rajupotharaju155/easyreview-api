@@ -23,6 +23,7 @@ import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
+import { HqUpdateUserDto } from './dto/hq-update-user.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
@@ -95,6 +96,28 @@ export class HqService {
   }
 
   /**
+   * Updates agency user fields available to HQ (currently name only).
+   */
+  async updateUser(id: string, dto: HqUpdateUserDto): Promise<User> {
+    const user = await this.findUserById(id);
+    if (dto.name !== undefined) {
+      user.name = dto.name;
+    }
+    return this.userRepository.save(user);
+  }
+
+  /**
+   * Soft-deletes an agency user from HQ.
+   */
+  async deleteUser(id: string): Promise<User> {
+    const user = await this.findUserById(id);
+    await this.userRepository.softDelete(id);
+    user.deletedAt = new Date();
+    console.log(`[INFO] HQ soft-deleted user ${id}`);
+    return user;
+  }
+
+  /**
    * Mints a short-lived login-as ticket so HQ can open the user dashboard as this user.
    */
   async createLoginAsTicket(id: string): Promise<LoginAsTicketResponseDto> {
@@ -147,6 +170,17 @@ export class HqService {
     if (!location) {
       throw new NotFoundException(`Location with id "${id}" not found`);
     }
+    return location;
+  }
+
+  /**
+   * Soft-deletes a location from HQ.
+   */
+  async deleteLocation(id: string): Promise<Location> {
+    const location = await this.findLocationById(id);
+    await this.locationRepository.softDelete(id);
+    location.deletedAt = new Date();
+    console.log(`[INFO] HQ soft-deleted location ${id}`);
     return location;
   }
 
