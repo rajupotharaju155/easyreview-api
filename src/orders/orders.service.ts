@@ -10,6 +10,7 @@ import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { EmailService } from '../email/email.service';
+import type { OrderConfirmationEmailDetails } from '../email/templates/email.templates';
 import { Location } from '../locations/entities/location.entity';
 import {
   STANDEE_DESIGNS,
@@ -19,6 +20,26 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { Order } from './entities/order.entity';
 import { DeliveryTo } from './enums/delivery-to.enum';
 import { OrderStatus } from './enums/order-status.enum';
+
+function formatOrderPlacedAtIst(value?: Date | string | null): string {
+  const date =
+    value instanceof Date
+      ? value
+      : value != null
+        ? new Date(value)
+        : new Date();
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const formatted = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(safeDate);
+  return `${formatted} IST`;
+}
 
 @Injectable()
 export class OrdersService {
@@ -116,18 +137,21 @@ export class OrdersService {
       .map((part) => part?.trim())
       .filter(Boolean)
       .join(', ');
+    const details: OrderConfirmationEmailDetails = {
+      orderId: order.id,
+      designName: order.designName,
+      businessName: order.businessNameSnapshot,
+      amountInr: order.amountInr,
+      phoneNumber: order.phoneNumber,
+      deliveryAddress: deliveryAddress || 'Address on file',
+      placedAtIst: formatOrderPlacedAtIst(order.createdAt),
+    };
     await this.emailService.sendOrderConfirmation(
       email,
-      {
-        orderId: order.id,
-        designName: order.designName,
-        businessName: order.businessNameSnapshot,
-        amountInr: order.amountInr,
-        phoneNumber: order.phoneNumber,
-        deliveryAddress: deliveryAddress || 'Address on file',
-      },
+      details,
       name ?? undefined,
     );
+    await this.emailService.sendAdminOrderReceived(details);
   }
 
   private resolveDeliveryAddress(
@@ -163,8 +187,8 @@ export class OrdersService {
     }
     return {
       addressLine1: line1,
-      addressLine2: null,
-      addressLine3: null,
+      addressLine2: location.city?.trim() || null,
+      addressLine3: location.state?.trim() || null,
       pincode: location.pincode?.trim() || null,
     };
   }
