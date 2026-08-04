@@ -30,25 +30,25 @@ export class CreateOrderDto {
   @Transform(emptyToUndefined)
   @IsString()
   @MinLength(1)
-  addressLine1?: string;
+  addressLine1?: string; //street address
 
   @ValidateIf((dto: CreateOrderDto) => dto.deliveryTo === DeliveryTo.OTHER)
   @Transform(emptyToUndefined)
   @IsString()
   @MinLength(1)
-  addressLine2?: string;
+  addressLine2?: string; // city
 
   @ValidateIf((dto: CreateOrderDto) => dto.deliveryTo === DeliveryTo.OTHER)
   @Transform(emptyToUndefined)
   @IsString()
   @MinLength(1)
-  addressLine3?: string;
+  addressLine3?: string; // state
 
   @ValidateIf((dto: CreateOrderDto) => dto.deliveryTo === DeliveryTo.OTHER)
   @Transform(emptyToUndefined)
   @IsString()
   @Matches(/^\d{6}$/, { message: 'Pincode must be a 6-digit number' })
-  pincode?: string;
+  pincode?: string; // postal code
 
   @Transform(emptyToUndefined)
   @IsString()

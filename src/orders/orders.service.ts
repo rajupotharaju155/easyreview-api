@@ -187,8 +187,8 @@ export class OrdersService {
     }
     return {
       addressLine1: line1,
-      addressLine2: null,
-      addressLine3: null,
+      addressLine2: location.city?.trim() || null,
+      addressLine3: location.state?.trim() || null,
       pincode: location.pincode?.trim() || null,
     };
   }
