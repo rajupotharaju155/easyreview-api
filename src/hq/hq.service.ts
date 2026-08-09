@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -11,6 +12,7 @@ import { ILike, Not, Repository } from 'typeorm';
 import { LoginResponseDto } from '../auth/dto/auth-response.dto';
 import { LoginDto } from '../auth/dto/login.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { generateId } from '../common/utils/id';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { generateHqTokens } from '../common/utils/token.util';
 import { Location } from '../locations/entities/location.entity';
@@ -19,20 +21,32 @@ import { LocationsService } from '../locations/locations.service';
 import { STANDEE_DESIGNS } from '../orders/constants/standee.constants';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
+import { HqAssignQrCodeDto } from './dto/hq-assign-qr-code.dto';
+import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { HqQrCodesQueryDto } from './dto/hq-qr-codes-query.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { HqUpdateUserDto } from './dto/hq-update-user.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
+import { QrCode } from './entities/qr-code.entity';
+import { PublicQrCodeDto } from './dto/public-qr-code.dto';
 import {
-  HQ_ADMIN_EMAIL,
-  HQ_ADMIN_PASSWORD,
+  HQ_ADMINS,
   LOGIN_AS_TICKET_EXPIRATION,
   LOGIN_AS_TOKEN_TYPE,
+  QR_BATCH_DEFAULT_SIZE,
 } from './hq.constants';
+import { generateQrCodeValue, ratingPageTargetUrl } from './qr-code.util';
+
+export type HqQrBatchResult = {
+  batchId: string;
+  size: number;
+  codes: QrCode[];
+};
 
 @Injectable()
 export class HqService {
@@ -46,6 +60,8 @@ export class HqService {
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    @InjectRepository(QrCode)
+    private readonly qrCodeRepository: Repository<QrCode>,
   ) {}
 
   /**
@@ -53,13 +69,14 @@ export class HqService {
    */
   async login(loginDto: LoginDto): Promise<LoginResponseDto> {
     const email = loginDto.email.trim().toLowerCase();
-    if (
-      email !== HQ_ADMIN_EMAIL.toLowerCase() ||
-      loginDto.password !== HQ_ADMIN_PASSWORD
-    ) {
+    const matched = HQ_ADMINS.find(
+      (admin) =>
+        admin.email.toLowerCase() === email &&
+        admin.password === loginDto.password,
+    );
+    if (!matched) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    console.log('[INFO] HQ admin login successful');
     return generateHqTokens(email, this.jwtService, this.configService);
   }
 
@@ -113,7 +130,6 @@ export class HqService {
     const user = await this.findUserById(id);
     await this.userRepository.softDelete(id);
     user.deletedAt = new Date();
-    console.log(`[INFO] HQ soft-deleted user ${id}`);
     return user;
   }
 
@@ -130,7 +146,6 @@ export class HqService {
     const ticket = await this.jwtService.signAsync(payload, {
       expiresIn: LOGIN_AS_TICKET_EXPIRATION,
     });
-    console.log(`[INFO] HQ issued login-as ticket for user ${user.id}`);
     return { ticket };
   }
 
@@ -180,7 +195,6 @@ export class HqService {
     const location = await this.findLocationById(id);
     await this.locationRepository.softDelete(id);
     location.deletedAt = new Date();
-    console.log(`[INFO] HQ soft-deleted location ${id}`);
     return location;
   }
 
@@ -188,11 +202,7 @@ export class HqService {
    * Fetches latest Places API metrics for a location and stores a daily snapshot.
    */
   async refreshLocationMetrics(id: string): Promise<LocationMetric> {
-    const metric = await this.locationsService.refreshMetrics(id);
-    console.log(
-      `[INFO] HQ refreshed metrics for location ${id} (period ${metric.periodKey})`,
-    );
-    return metric;
+    return this.locationsService.refreshMetrics(id);
   }
 
   /**
@@ -216,9 +226,7 @@ export class HqService {
       throw new ConflictException(`Slug "${slug}" is already in use`);
     }
     location.slug = slug;
-    const saved = await this.locationRepository.save(location);
-    console.log(`[INFO] HQ updated location ${id} slug to ${slug}`);
-    return saved;
+    return this.locationRepository.save(location);
   }
 
   /**
@@ -254,11 +262,7 @@ export class HqService {
       );
     }
     location.userId = targetUserId;
-    const saved = await this.locationRepository.save(location);
-    console.log(
-      `[INFO] HQ transferred location ${locationId} to user ${targetUserId}`,
-    );
-    return saved;
+    return this.locationRepository.save(location);
   }
 
   /**
@@ -315,8 +319,162 @@ export class HqService {
     order.pincode = dto.pincode?.trim() || null;
     order.status = dto.status;
     order.statusNote = dto.statusNote?.trim() || null;
-    const saved = await this.orderRepository.save(order);
-    console.log(`[INFO] HQ updated order ${id} (status ${saved.status})`);
-    return saved;
+    return this.orderRepository.save(order);
+  }
+
+  /**
+   * Creates a batch of unassigned claimable QR codes for pre-printed standees.
+   */
+  async createQrBatch(dto: HqCreateQrBatchDto): Promise<HqQrBatchResult> {
+    const size = dto.size ?? QR_BATCH_DEFAULT_SIZE;
+    const batchId = generateId();
+    const rows: QrCode[] = [];
+    const used = new Set<string>();
+
+    while (rows.length < size) {
+      const code = generateQrCodeValue();
+      if (used.has(code)) {
+        continue;
+      }
+      used.add(code);
+      const existing = await this.qrCodeRepository.findOne({
+        where: { code },
+        select: ['id'],
+      });
+      if (existing) {
+        continue;
+      }
+      rows.push(
+        this.qrCodeRepository.create({
+          code,
+          batchId,
+          locationId: null,
+          targetUrl: null,
+          assignedAt: null,
+        }),
+      );
+    }
+
+    const codes = await this.qrCodeRepository.save(rows);
+    return { batchId, size: codes.length, codes };
+  }
+
+  /**
+   * Deletes an unassigned QR code. Assigned codes must be unassigned first.
+   */
+  async deleteQrCode(id: string): Promise<QrCode> {
+    const qr = await this.qrCodeRepository.findOne({ where: { id } });
+    if (!qr) {
+      throw new NotFoundException(`QR code with id "${id}" not found`);
+    }
+    if (qr.locationId || qr.targetUrl) {
+      throw new BadRequestException(
+        'Cannot delete an assigned QR code. Remove the assignment first.',
+      );
+    }
+    await this.qrCodeRepository.remove(qr);
+    return qr;
+  }
+
+  /**
+   * Assigns (or reassigns) a claimable QR code to a location and sets targetUrl from slug.
+   */
+  async assignQrCode(dto: HqAssignQrCodeDto): Promise<QrCode> {
+    const code = dto.code.trim().toUpperCase();
+    const qr = await this.qrCodeRepository.findOne({ where: { code } });
+    if (!qr) {
+      throw new NotFoundException(`QR code "${code}" not found`);
+    }
+
+    const location = await this.findLocationById(dto.locationId.trim());
+    if (!location.slug?.trim()) {
+      throw new BadRequestException(
+        `Location "${location.id}" has no slug; cannot build rating target URL`,
+      );
+    }
+
+    qr.locationId = location.id;
+    qr.targetUrl = ratingPageTargetUrl(location.slug);
+    qr.assignedAt = new Date();
+    await this.qrCodeRepository.save(qr);
+
+    const assigned = await this.qrCodeRepository.findOne({
+      where: { id: qr.id },
+      relations: ['location'],
+    });
+    if (!assigned) {
+      throw new NotFoundException(`QR code "${code}" not found after assign`);
+    }
+    return assigned;
+  }
+
+  /**
+   * Clears location assignment so the physical QR can be reused or deleted.
+   */
+  async unassignQrCode(id: string): Promise<QrCode> {
+    const qr = await this.qrCodeRepository.findOne({ where: { id } });
+    if (!qr) {
+      throw new NotFoundException(`QR code with id "${id}" not found`);
+    }
+    if (!qr.locationId && !qr.targetUrl) {
+      throw new BadRequestException(`QR code "${qr.code}" is not assigned`);
+    }
+
+    qr.locationId = null;
+    qr.targetUrl = null;
+    qr.assignedAt = null;
+    return this.qrCodeRepository.save(qr);
+  }
+
+  /**
+   * Public lookup for claimable QR codes. Does not expose location internals.
+   */
+  async resolveQrCode(rawCode: string): Promise<PublicQrCodeDto> {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) {
+      throw new NotFoundException('QR code not found');
+    }
+    const qr = await this.qrCodeRepository.findOne({ where: { code } });
+    if (!qr) {
+      throw new NotFoundException(`QR code "${code}" not found`);
+    }
+    return new PublicQrCodeDto({
+      code: qr.code,
+      targetUrl: qr.targetUrl?.trim() || null,
+    });
+  }
+
+  /**
+   * Lists claimable QR codes with location assignment when present.
+   */
+  async findQrCodes(
+    query: HqQrCodesQueryDto,
+  ): Promise<PaginatedResponseDto<QrCode>> {
+    const { page = 1, limit = 20, search, batchId, locationId } = query;
+    const skip = (page - 1) * limit;
+    const qb = this.qrCodeRepository
+      .createQueryBuilder('qr')
+      .leftJoinAndSelect('qr.location', 'location')
+      .orderBy('qr.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const term = search?.trim();
+    if (term) {
+      qb.andWhere('(qr.code ILIKE :term OR qr.id ILIKE :term)', {
+        term: `%${term}%`,
+      });
+    }
+    if (batchId?.trim()) {
+      qb.andWhere('qr.batchId = :batchId', { batchId: batchId.trim() });
+    }
+    if (locationId?.trim()) {
+      qb.andWhere('qr.locationId = :locationId', {
+        locationId: locationId.trim(),
+      });
+    }
+
+    const [data, total] = await qb.getManyAndCount();
+    return new PaginatedResponseDto(data, total, page, limit);
   }
 }

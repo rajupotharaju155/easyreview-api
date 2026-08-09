@@ -213,13 +213,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired login-as ticket');
     }
     const user = await this.usersService.findOne(payload.sub);
-    console.log(`[INFO] Login-as ticket exchanged for user ${user.id}`);
     //generate the token for user like how actually user is getting token
     return generateTokens(user, this.jwtService, this.configService);
   }
 
   private async issueAndSendVerificationOtp(user: User): Promise<void> {
-    try {
     const otp = generateOtp();
     const updated = await this.usersService.setEmailVerificationOtp(
       user.id,
@@ -227,9 +225,5 @@ export class AuthService {
       otpExpiresAt(),
     );
     await this.emailService.sendVerificationOtp(updated.email, otp);
-    } catch (error) {
-      console.error('Error sending verification OTP:', error);
-      throw error;
-    }
   }
 }
