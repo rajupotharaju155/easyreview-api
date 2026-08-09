@@ -4,8 +4,14 @@ interface LogContext {
   [key: string]: any;
 }
 
+const GCP_SEVERITY: Record<string, string> = {
+  ERROR: 'ERROR',
+  WARN: 'WARNING',
+  INFO: 'INFO',
+};
+
 /**
- * Custom logger service with structured logging.
+ * Custom logger service with structured JSON logging for Cloud Logging.
  * Provides three log levels: info, warn, and error.
  */
 @Injectable()
@@ -77,7 +83,8 @@ export class LoggerService implements NestLoggerService {
   }
 
   /**
-   * Write log in structured JSON format
+   * Write log as a single-line JSON object so Cloud Logging stores jsonPayload.
+   * Uses `severity` so GCP maps the level correctly in Logs Explorer.
    */
   private writeLog(level: string, message: any, meta: LogContext = {}): void {
     const context = meta.context || this.context;
@@ -95,18 +102,32 @@ export class LoggerService implements NestLoggerService {
       return;
     }
 
-    const logEntry = {
-      ...(meta.url && { url: meta.url }),
-      ...(meta.method && { method: meta.method }),
-      ...(meta.statusCode && { statusCode: meta.statusCode }),
-      ...(meta.duration && { duration: meta.duration }),
-      ...(meta.query && { query: meta.query }),
-      ...(meta.params && { params: meta.params }),
-      ...(meta.body && { body: meta.body }),
-      ...(meta.userAgent && { userAgent: meta.userAgent }),
-      ...(meta.ip && { ip: meta.ip }),
-      level,
+    const {
+      context: _context,
+      trace,
+      details,
+      httpRequest,
+      ...fields
+    } = meta;
+    const nestedDetails =
+      details && typeof details === 'object' && !Array.isArray(details)
+        ? { ...details, ...fields }
+        : Object.keys(fields).length > 0
+          ? { ...fields }
+          : details;
+
+    // Root special fields (severity, message, httpRequest) are hoisted by Cloud
+    // Logging. Method/status/latency pills come from httpRequest; keep bodies
+    // and userAgent under details so they only appear when expanded.
+    const logEntry: Record<string, unknown> = {
+      severity: GCP_SEVERITY[level] || 'INFO',
       message: messageStr,
+      ...(httpRequest ? { httpRequest } : {}),
+      ...(context ? { context } : {}),
+      ...(trace ? { trace } : {}),
+      ...(nestedDetails && Object.keys(nestedDetails).length > 0
+        ? { details: nestedDetails }
+        : {}),
     };
 
     const logLine = JSON.stringify(logEntry);
