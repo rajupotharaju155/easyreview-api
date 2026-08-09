@@ -59,7 +59,6 @@ export class HqService {
     ) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    console.log('[INFO] HQ admin login successful');
     return generateHqTokens(email, this.jwtService, this.configService);
   }
 
@@ -113,7 +112,6 @@ export class HqService {
     const user = await this.findUserById(id);
     await this.userRepository.softDelete(id);
     user.deletedAt = new Date();
-    console.log(`[INFO] HQ soft-deleted user ${id}`);
     return user;
   }
 
@@ -130,7 +128,6 @@ export class HqService {
     const ticket = await this.jwtService.signAsync(payload, {
       expiresIn: LOGIN_AS_TICKET_EXPIRATION,
     });
-    console.log(`[INFO] HQ issued login-as ticket for user ${user.id}`);
     return { ticket };
   }
 
@@ -180,7 +177,6 @@ export class HqService {
     const location = await this.findLocationById(id);
     await this.locationRepository.softDelete(id);
     location.deletedAt = new Date();
-    console.log(`[INFO] HQ soft-deleted location ${id}`);
     return location;
   }
 
@@ -188,11 +184,7 @@ export class HqService {
    * Fetches latest Places API metrics for a location and stores a daily snapshot.
    */
   async refreshLocationMetrics(id: string): Promise<LocationMetric> {
-    const metric = await this.locationsService.refreshMetrics(id);
-    console.log(
-      `[INFO] HQ refreshed metrics for location ${id} (period ${metric.periodKey})`,
-    );
-    return metric;
+    return this.locationsService.refreshMetrics(id);
   }
 
   /**
@@ -216,9 +208,7 @@ export class HqService {
       throw new ConflictException(`Slug "${slug}" is already in use`);
     }
     location.slug = slug;
-    const saved = await this.locationRepository.save(location);
-    console.log(`[INFO] HQ updated location ${id} slug to ${slug}`);
-    return saved;
+    return this.locationRepository.save(location);
   }
 
   /**
@@ -254,11 +244,7 @@ export class HqService {
       );
     }
     location.userId = targetUserId;
-    const saved = await this.locationRepository.save(location);
-    console.log(
-      `[INFO] HQ transferred location ${locationId} to user ${targetUserId}`,
-    );
-    return saved;
+    return this.locationRepository.save(location);
   }
 
   /**
@@ -315,8 +301,6 @@ export class HqService {
     order.pincode = dto.pincode?.trim() || null;
     order.status = dto.status;
     order.statusNote = dto.statusNote?.trim() || null;
-    const saved = await this.orderRepository.save(order);
-    console.log(`[INFO] HQ updated order ${id} (status ${saved.status})`);
-    return saved;
+    return this.orderRepository.save(order);
   }
 }
