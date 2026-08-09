@@ -35,8 +35,7 @@ import { TransferLocationDto } from './dto/transfer-location.dto';
 import { QrCode } from './entities/qr-code.entity';
 import { PublicQrCodeDto } from './dto/public-qr-code.dto';
 import {
-  HQ_ADMIN_EMAIL,
-  HQ_ADMIN_PASSWORD,
+  HQ_ADMINS,
   LOGIN_AS_TICKET_EXPIRATION,
   LOGIN_AS_TOKEN_TYPE,
   QR_BATCH_DEFAULT_SIZE,
@@ -70,10 +69,12 @@ export class HqService {
    */
   async login(loginDto: LoginDto): Promise<LoginResponseDto> {
     const email = loginDto.email.trim().toLowerCase();
-    if (
-      email !== HQ_ADMIN_EMAIL.toLowerCase() ||
-      loginDto.password !== HQ_ADMIN_PASSWORD
-    ) {
+    const matched = HQ_ADMINS.find(
+      (admin) =>
+        admin.email.toLowerCase() === email &&
+        admin.password === loginDto.password,
+    );
+    if (!matched) {
       throw new UnauthorizedException('Invalid credentials');
     }
     return generateHqTokens(email, this.jwtService, this.configService);

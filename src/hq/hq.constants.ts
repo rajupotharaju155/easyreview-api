@@ -1,5 +1,13 @@
-export const HQ_ADMIN_EMAIL = 'raju.debug@gmail.com';
-export const HQ_ADMIN_PASSWORD = '9987672912';
+export type HqAdminCredential = {
+  email: string;
+  password: string;
+};
+
+export const HQ_ADMINS: HqAdminCredential[] = [
+  { email: 'raju.debug@gmail.com', password: '9987672912' },
+  { email: 'komalswain37@gmail.com', password: '7506191810' },
+];
+
 export const HQ_ADMIN_SUB = 'hq-admin';
 export const HQ_TOKEN_TYPE = 'hq' as const;
 /** Short-lived ticket minted by HQ for user-dashboard impersonation. */
