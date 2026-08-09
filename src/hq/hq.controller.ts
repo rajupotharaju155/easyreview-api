@@ -19,16 +19,20 @@ import { Location } from '../locations/entities/location.entity';
 import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
+import { HqAssignQrCodeDto } from './dto/hq-assign-qr-code.dto';
+import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
+import { HqQrCodesQueryDto } from './dto/hq-qr-codes-query.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { HqUpdateUserDto } from './dto/hq-update-user.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
+import { QrCode } from './entities/qr-code.entity';
 import { HqGuard } from './guards/hq.guard';
-import { HqService } from './hq.service';
+import { HqService, type HqQrBatchResult } from './hq.service';
 
 @Controller('hq')
 export class HqController {
@@ -148,5 +152,42 @@ export class HqController {
     @Body() dto: HqUpdateOrderDto,
   ): Promise<Order> {
     return this.hqService.updateOrder(id, dto);
+  }
+
+  @UseGuards(HqGuard)
+  @Get('qr-codes')
+  async findQrCodes(
+    @Query() query: HqQrCodesQueryDto,
+  ): Promise<PaginatedResponseDto<QrCode>> {
+    return this.hqService.findQrCodes(query);
+  }
+
+  @UseGuards(HqGuard)
+  @Post('qr-codes/batch')
+  @HttpCode(HttpStatus.CREATED)
+  async createQrBatch(
+    @Body() dto: HqCreateQrBatchDto,
+  ): Promise<HqQrBatchResult> {
+    return this.hqService.createQrBatch(dto);
+  }
+
+  @UseGuards(HqGuard)
+  @Post('qr-codes/assign')
+  @HttpCode(HttpStatus.OK)
+  async assignQrCode(@Body() dto: HqAssignQrCodeDto): Promise<QrCode> {
+    return this.hqService.assignQrCode(dto);
+  }
+
+  @UseGuards(HqGuard)
+  @Post('qr-codes/:id/unassign')
+  @HttpCode(HttpStatus.OK)
+  async unassignQrCode(@Param('id') id: string): Promise<QrCode> {
+    return this.hqService.unassignQrCode(id);
+  }
+
+  @UseGuards(HqGuard)
+  @Delete('qr-codes/:id')
+  async deleteQrCode(@Param('id') id: string): Promise<QrCode> {
+    return this.hqService.deleteQrCode(id);
   }
 }
