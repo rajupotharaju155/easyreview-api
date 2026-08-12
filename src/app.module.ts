@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { AiSettingsModule } from './ai-settings/ai-settings.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -67,6 +68,7 @@ const ignoreEnvFile =
     InternalJobsModule,
     UsersModule,
     LocationsModule,
+    AiSettingsModule,
     OrdersModule,
     PrivateFeedbackModule,
     ReviewModule,

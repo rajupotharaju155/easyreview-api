@@ -5,7 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, QueryFailedError, Repository, UpdateResult } from 'typeorm';
+import {
+  EntityManager,
+  QueryFailedError,
+  Repository,
+  UpdateResult,
+} from 'typeorm';
+import { AiSettingsService } from '../ai-settings/ai-settings.service';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
@@ -27,10 +33,7 @@ import { Location } from './entities/location.entity';
 import { Review } from './entities/review.entity';
 import { GooglePlacesService } from '../services/google-places.service';
 
-type ScanMetricField =
-  | 'scanCount'
-  | 'aiReviewCount'
-  | 'redirectToGoogleCount';
+type ScanMetricField = 'scanCount' | 'aiReviewCount' | 'redirectToGoogleCount';
 
 type ScanSummaryRow = {
   locationId: string;
@@ -53,6 +56,7 @@ export class LocationsService {
     private readonly locationMetricRepository: Repository<LocationMetric>,
     private readonly googlePlacesService: GooglePlacesService,
     private readonly currentUserUtil: CurrentUserUtil,
+    private readonly aiSettingsService: AiSettingsService,
   ) {}
 
   async create(
@@ -280,8 +284,7 @@ export class LocationsService {
         succeeded += 1;
       } catch (error) {
         failed += 1;
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
         this.logger.warn(
           `Failed to refresh metrics for location ${location.id}: ${message}`,
         );
@@ -319,6 +322,7 @@ export class LocationsService {
         'slug',
         'city',
         'state',
+        'primaryTypeDisplayName',
         'keywords',
         'languages',
       ],
@@ -330,6 +334,10 @@ export class LocationsService {
 
     void this.safeIncrementScanMetric(location.id, 'scanCount');
 
+    const questions = await this.aiSettingsService.findPublicQuestions(
+      location.id,
+    );
+
     return new PublicLocationDto({
       id: location.id,
       name: location.name,
@@ -337,8 +345,10 @@ export class LocationsService {
       slug: location.slug,
       city: location.city,
       state: location.state,
+      primaryTypeDisplayName: location.primaryTypeDisplayName,
       keywords: location.keywords,
       languages: location.languages,
+      questions,
     });
   }
 

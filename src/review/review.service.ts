@@ -1,10 +1,15 @@
 import {
   BadGatewayException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+  AiSettingsService,
+  SubmittedAnswer,
+} from '../ai-settings/ai-settings.service';
 import { LocationsService } from '../locations/locations.service';
 import {
   ReviewSuggestionDto,
@@ -12,57 +17,72 @@ import {
 } from './dto/review-suggestions-response.dto';
 import { SuggestReviewsDto } from './dto/suggest-reviews.dto';
 
-const WORD_TARGETS = [20, 40, 60] as const;
+/**
+ * One short and one medium draft. Randomized per request so a location's reviews
+ * do not all fall into the same length buckets.
+ */
+const WORD_TARGET_RANGES = [
+  { min: 15, max: 25 },
+  { min: 30, max: 45 },
+] as const;
 const GEMINI_MODEL = 'gemini-3.6-flash';
 
 type GeminiSuggestion = {
   text?: unknown;
   language?: unknown;
-  targetWordCount?: unknown;
 };
 
 @Injectable()
 export class ReviewService {
+  private readonly logger = new Logger(ReviewService.name);
   private gemini: GoogleGenerativeAI | null = null;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly locationsService: LocationsService,
+    private readonly aiSettingsService: AiSettingsService,
   ) {}
 
   async suggestReviews(
     dto: SuggestReviewsDto,
   ): Promise<ReviewSuggestionsResponseDto> {
+    const languages = this.normalizeLanguages(dto.languages);
+    const keywords = dto.keywords.map((k) => k.trim()).filter(Boolean);
+    const answers = await this.aiSettingsService.resolveAnswers(
+      dto.locationId,
+      dto.answers,
+    );
+    const wordTargets = this.pickWordTargets();
+    const assignedLanguages = this.assignLanguages(
+      languages,
+      wordTargets.length,
+    );
+    const prompt = this.buildPrompt(
+      dto,
+      keywords,
+      assignedLanguages,
+      answers,
+      wordTargets,
+    );
+
     if (process.env.NODE_ENV === 'development') {
+      this.logger.log(`Skipping Gemini. Prompt would be:\n${prompt}`);
       await new Promise((resolve) => setTimeout(resolve, 3000));
       const mockResponse = new ReviewSuggestionsResponseDto([
         {
           text: 'Expected this to be the best saloon in Gajwel, but my experience was very disappointing. The service was quite poor today.',
           language: 'English',
-          targetWordCount: 20,
         },
         {
           text: 'Gajwel lo unna CRUSH MENS BEAUTY PARLOUR & SALOON ki vellanu. Pedda ga emi baaledu. Friendly staff untaru ani vinnanu kaani ikkada service bilkul nachaledu. Good massage kosam vella kaani chala disappointing ga anipinchindi. Malli ikadiki vellanum anukovatledhu. Improvements avasaram.',
           language: 'Telugu',
-          targetWordCount: 40,
-        },
-        {
-          text: 'I visited CRUSH MENS BEAUTY PARLOUR & SALOON in Gajwel expecting great service after hearing it was the best saloon around. Sadly, my experience was very unsatisfactory. I was hoping for friendly staff and a good massage, but the service was rushed and unprofessional. I hope the management takes customer feedback seriously and improves their quality of service soon.',
-          language: 'English',
-          targetWordCount: 60,
         },
       ]);
       void this.locationsService.incrementAiReviewCount(dto.locationId);
       return mockResponse;
     }
-    const client = this.getGeminiClient();
-    const languages = this.normalizeLanguages(dto.languages);
-    const keywords = dto.keywords.map((k) => k.trim()).filter(Boolean);
-    const assignedLanguages = this.assignLanguages(
-      languages,
-      WORD_TARGETS.length,
-    );
 
+    const client = this.getGeminiClient();
     const model = client.getGenerativeModel({
       model: GEMINI_MODEL,
       generationConfig: {
@@ -70,8 +90,6 @@ export class ReviewService {
         responseMimeType: 'application/json',
       },
     });
-
-    const prompt = this.buildPrompt(dto, keywords, assignedLanguages);
 
     let rawText: string;
     try {
@@ -85,7 +103,11 @@ export class ReviewService {
       );
     }
 
-    const suggestions = this.parseSuggestions(rawText, assignedLanguages);
+    const suggestions = this.parseSuggestions(
+      rawText,
+      assignedLanguages,
+      wordTargets,
+    );
     const response = new ReviewSuggestionsResponseDto(suggestions);
     void this.locationsService.incrementAiReviewCount(dto.locationId);
     return response;
@@ -98,9 +120,7 @@ export class ReviewService {
 
     const apiKey = this.configService.get<string>('GEMINI_API_KEY')?.trim();
     if (!apiKey) {
-      throw new ServiceUnavailableException(
-        'GEMINI_API_KEY is not configured',
-      );
+      throw new ServiceUnavailableException('GEMINI_API_KEY is not configured');
     }
 
     this.gemini = new GoogleGenerativeAI(apiKey);
@@ -127,6 +147,12 @@ export class ReviewService {
     return normalized;
   }
 
+  private pickWordTargets(): number[] {
+    return WORD_TARGET_RANGES.map(
+      ({ min, max }) => min + Math.floor(Math.random() * (max - min + 1)),
+    );
+  }
+
   /** Prefer English for extra slots so 2 langs → 2 English + 1 other. */
   private assignLanguages(languages: string[], count: number): string[] {
     const ordered = [...languages].sort((a, b) => {
@@ -146,32 +172,52 @@ export class ReviewService {
     dto: SuggestReviewsDto,
     keywords: string[],
     assignedLanguages: string[],
+    answers: SubmittedAnswer[],
+    wordTargets: number[],
   ): string {
     const locationParts = [dto.city, dto.state].filter(Boolean).join(', ');
-    const specs = WORD_TARGETS.map((wordCount, index) => ({
+    const specs = wordTargets.map((wordCount, index) => ({
       index: index + 1,
       language: assignedLanguages[index],
       targetWordCount: wordCount,
     }));
+    const answerLines = answers.map(
+      ({ question, answer }) => `- ${question}: ${answer}`,
+    );
 
     return [
       'You write short, authentic Google review drafts for customers.',
       'Return ONLY valid JSON matching this shape:',
-      '{"suggestions":[{"text":"...","language":"...","targetWordCount":20}]}',
+      '{"suggestions":[{"text":"...","language":"..."}]}',
       '',
       'Business:',
       `- Name: ${dto.name}`,
+      dto.primaryTypeDisplayName
+        ? `- Category: ${dto.primaryTypeDisplayName}`
+        : null,
       locationParts ? `- Location: ${locationParts}` : null,
       `- Customer star rating: ${dto.starRating} out of 5`,
       `- Keywords to naturally weave in when relevant: ${keywords.join(', ') || 'none'}`,
+      ...(answerLines.length
+        ? ['', 'What this customer told us about their visit:', ...answerLines]
+        : []),
       '',
-      'Generate exactly 3 review drafts with these exact specs:',
+      `Generate exactly ${wordTargets.length} review drafts with these exact specs:`,
       ...specs.map(
         (spec) =>
           `${spec.index}. language="${spec.language}", targetWordCount=${spec.targetWordCount}`,
       ),
       '',
       'Rules:',
+      ...(answerLines.length
+        ? [
+            '- Ground every draft in the visit details above; treat them as facts about this specific customer.',
+            '- Work those details into the sentences. Never list them or echo the question wording.',
+          ]
+        : []),
+      dto.primaryTypeDisplayName
+        ? '- Only mention services, staff roles, and details that a customer of this category would plausibly experience.'
+        : null,
       '- Match the tone to the star rating (higher = more positive; lower = polite constructive).',
       '- Sound like a real customer, not marketing copy.',
       '- Do not invent specific staff names, prices, or unverifiable claims.',
@@ -187,6 +233,7 @@ export class ReviewService {
   private parseSuggestions(
     rawText: string,
     assignedLanguages: string[],
+    wordTargets: number[],
   ): ReviewSuggestionDto[] {
     let parsed: { suggestions?: GeminiSuggestion[] };
     try {
@@ -195,27 +242,30 @@ export class ReviewService {
       throw new BadGatewayException('Gemini returned invalid JSON');
     }
 
-    if (!Array.isArray(parsed.suggestions) || parsed.suggestions.length < 3) {
+    if (
+      !Array.isArray(parsed.suggestions) ||
+      parsed.suggestions.length < wordTargets.length
+    ) {
       throw new BadGatewayException(
         'Gemini returned an incomplete suggestions list',
       );
     }
 
-    return WORD_TARGETS.map((targetWordCount, index) => {
-      const item = parsed.suggestions![index];
-      const text = typeof item?.text === 'string' ? item.text.trim() : '';
-      if (!text) {
-        throw new BadGatewayException('Gemini returned an empty suggestion');
-      }
+    return parsed.suggestions
+      .slice(0, wordTargets.length)
+      .map((item, index) => {
+        const text = typeof item?.text === 'string' ? item.text.trim() : '';
+        if (!text) {
+          throw new BadGatewayException('Gemini returned an empty suggestion');
+        }
 
-      return new ReviewSuggestionDto({
-        text,
-        language:
-          typeof item?.language === 'string' && item.language.trim()
-            ? item.language.trim()
-            : assignedLanguages[index],
-        targetWordCount,
+        return new ReviewSuggestionDto({
+          text,
+          language:
+            typeof item?.language === 'string' && item.language.trim()
+              ? item.language.trim()
+              : assignedLanguages[index],
+        });
       });
-    });
   }
 }
