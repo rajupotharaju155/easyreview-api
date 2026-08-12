@@ -44,7 +44,7 @@ DEPLOY_ARGS=(
   --port 8080
   --memory "${CLOUD_RUN_MEMORY:-512Mi}"
   --cpu "${CLOUD_RUN_CPU:-1}"
-  --min-instances "${CLOUD_RUN_MIN_INSTANCES:-0}"
+  --min-instances "${CLOUD_RUN_MIN_INSTANCES:-1}"
   --max-instances "${CLOUD_RUN_MAX_INSTANCES:-5}"
   --add-cloudsql-instances "${CLOUD_SQL_INSTANCE}"
   --timeout "${CLOUD_RUN_TIMEOUT:-900}"
