@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, Schema, ThinkingLevel, Type } from '@google/genai';
 import {
   AiSettingsService,
   SubmittedAnswer,
@@ -27,6 +27,28 @@ const WORD_TARGET_RANGES = [
 ] as const;
 const GEMINI_MODEL = 'gemini-3.6-flash';
 
+/** Item count is pinned so the model cannot return fewer drafts than we asked for. */
+const RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    suggestions: {
+      type: Type.ARRAY,
+      minItems: String(WORD_TARGET_RANGES.length),
+      maxItems: String(WORD_TARGET_RANGES.length),
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          text: { type: Type.STRING },
+          language: { type: Type.STRING },
+        },
+        required: ['text', 'language'],
+        propertyOrdering: ['text', 'language'],
+      },
+    },
+  },
+  required: ['suggestions'],
+} satisfies Schema;
+
 type GeminiSuggestion = {
   text?: unknown;
   language?: unknown;
@@ -35,7 +57,7 @@ type GeminiSuggestion = {
 @Injectable()
 export class ReviewService {
   private readonly logger = new Logger(ReviewService.name);
-  private gemini: GoogleGenerativeAI | null = null;
+  private gemini: GoogleGenAI | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -83,24 +105,31 @@ export class ReviewService {
     }
 
     const client = this.getGeminiClient();
-    const model = client.getGenerativeModel({
-      model: GEMINI_MODEL,
-      generationConfig: {
-        temperature: 0.9,
-        responseMimeType: 'application/json',
-      },
-    });
 
-    let rawText: string;
+    let rawText: string | undefined;
     try {
-      const result = await model.generateContent(prompt);
-      rawText = result.response.text();
+      const result = await client.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: RESPONSE_SCHEMA,
+          // Gemini 3 defaults to high thinking, which cost ~10s on a page the
+          // customer is waiting on. Short drafts need no reasoning budget.
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+        },
+      });
+      rawText = result.text;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Gemini request failed';
       throw new BadGatewayException(
         `Failed to generate review suggestions: ${message}`,
       );
+    }
+
+    if (!rawText) {
+      throw new BadGatewayException('Gemini returned an empty response');
     }
 
     const suggestions = this.parseSuggestions(
@@ -113,7 +142,7 @@ export class ReviewService {
     return response;
   }
 
-  private getGeminiClient(): GoogleGenerativeAI {
+  private getGeminiClient(): GoogleGenAI {
     if (this.gemini) {
       return this.gemini;
     }
@@ -123,7 +152,7 @@ export class ReviewService {
       throw new ServiceUnavailableException('GEMINI_API_KEY is not configured');
     }
 
-    this.gemini = new GoogleGenerativeAI(apiKey);
+    this.gemini = new GoogleGenAI({ apiKey });
     return this.gemini;
   }
 
