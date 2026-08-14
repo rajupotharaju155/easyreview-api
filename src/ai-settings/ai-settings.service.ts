@@ -37,11 +37,7 @@ export class AiSettingsService {
       where: { locationId },
     });
 
-    return new AiSettingsResponseDto({
-      locationId,
-      questions: settings?.questions ?? [],
-      questionsEnabled: settings?.questionsEnabled ?? true,
-    });
+    return this.toResponse(locationId, settings);
   }
 
   async upsertForOwnedLocation(
@@ -62,36 +58,57 @@ export class AiSettingsService {
       upsertAiSettingsDto.questionsEnabled ??
       existing?.questionsEnabled ??
       true;
+    const keywords =
+      upsertAiSettingsDto.keywords !== undefined
+        ? this.normalizeStringList(upsertAiSettingsDto.keywords, 'keyword')
+        : (existing?.keywords ?? null);
+    const languages =
+      upsertAiSettingsDto.languages !== undefined
+        ? this.normalizeStringList(upsertAiSettingsDto.languages, 'language')
+        : (existing?.languages ?? null);
 
     const settings = existing
-      ? Object.assign(existing, { questions, questionsEnabled })
+      ? Object.assign(existing, {
+          questions,
+          questionsEnabled,
+          keywords,
+          languages,
+        })
       : this.aiSettingsRepository.create({
           locationId,
           questions,
           questionsEnabled,
+          keywords,
+          languages,
         });
 
     const saved = await this.aiSettingsRepository.save(settings);
 
-    return new AiSettingsResponseDto({
-      locationId,
-      questions: saved.questions ?? [],
-      questionsEnabled: saved.questionsEnabled,
+    return this.toResponse(locationId, saved);
+  }
+
+  /** Prompt fields for the public rating page. Questions are empty when switched off. */
+  async findPublicForRatingPage(locationId: string): Promise<{
+    questions: AiQuestion[];
+    keywords: string[] | null;
+    languages: string[] | null;
+  }> {
+    const settings = await this.aiSettingsRepository.findOne({
+      where: { locationId },
+      select: ['questions', 'questionsEnabled', 'keywords', 'languages'],
     });
+
+    return {
+      questions: settings?.questionsEnabled ? (settings.questions ?? []) : [],
+      keywords: settings?.keywords ?? null,
+      languages: settings?.languages ?? null,
+    };
   }
 
   /** Questions for the public rating page. Empty when unset or switched off. */
   async findPublicQuestions(locationId: string): Promise<AiQuestion[]> {
-    const settings = await this.aiSettingsRepository.findOne({
-      where: { locationId },
-      select: ['questions', 'questionsEnabled'],
-    });
-
-    if (!settings?.questionsEnabled) {
-      return [];
-    }
-
-    return settings.questions ?? [];
+    const { questions } = await this.findPublicForRatingPage(locationId);
+    return questions;
   }
 
   /**
@@ -148,6 +165,42 @@ export class AiSettingsService {
     }
 
     return resolved;
+  }
+
+  private toResponse(
+    locationId: string,
+    settings: AiSettings | null,
+  ): AiSettingsResponseDto {
+    return new AiSettingsResponseDto({
+      locationId,
+      questions: settings?.questions ?? [],
+      questionsEnabled: settings?.questionsEnabled ?? true,
+      keywords: settings?.keywords ?? [],
+      languages: settings?.languages ?? [],
+    });
+  }
+
+  private normalizeStringList(
+    values: string[],
+    label: string,
+  ): string[] | null {
+    if (!values.length) {
+      return null;
+    }
+
+    const unique: string[] = [];
+    const seen = new Set<string>();
+
+    for (const value of values) {
+      const key = value.toLowerCase();
+      if (seen.has(key)) {
+        throw new BadRequestException(`Duplicate ${label} "${value}"`);
+      }
+      seen.add(key);
+      unique.push(value);
+    }
+
+    return unique;
   }
 
   private normalizeQuestions(questions: AiQuestionDto[]): AiQuestion[] | null {

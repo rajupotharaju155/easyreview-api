@@ -80,12 +80,6 @@ export class Location {
   @Column({ type: 'text', array: true, nullable: true })
   types: string[] | null;
 
-  @Column({ type: 'text', array: true, nullable: true })
-  keywords: string[] | null;
-
-  @Column({ type: 'text', array: true, nullable: true })
-  languages: string[] | null;
-
   /** Cached latest metrics for fast list views. Source of truth is location_metrics. */
   @Column({ type: 'float', nullable: true })
   currentRating: number | null;

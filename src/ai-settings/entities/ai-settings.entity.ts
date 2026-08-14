@@ -17,6 +17,10 @@ export const AI_MIN_OPTIONS = 3;
 export const AI_MAX_OPTIONS = 4;
 export const AI_QUESTION_MAX_LENGTH = 120;
 export const AI_OPTION_MAX_LENGTH = 40;
+export const AI_MAX_KEYWORDS = 20;
+export const AI_MAX_LANGUAGES = 10;
+export const AI_KEYWORD_MAX_LENGTH = 40;
+export const AI_LANGUAGE_MAX_LENGTH = 40;
 
 export type AiQuestion = {
   question: string;
@@ -47,6 +51,12 @@ export class AiSettings {
   /** Lets a business switch the questionnaire off without losing its config. */
   @Column({ type: 'boolean', default: true })
   questionsEnabled: boolean;
+
+  @Column({ type: 'text', array: true, nullable: true })
+  keywords: string[] | null;
+
+  @Column({ type: 'text', array: true, nullable: true })
+  languages: string[] | null;
 
   /** Reserved for the next batch of AI settings; not exposed by the API yet. */
   @Column({ type: 'varchar', length: 32, nullable: true })
