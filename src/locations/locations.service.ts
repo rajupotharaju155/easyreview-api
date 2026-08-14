@@ -323,8 +323,6 @@ export class LocationsService {
         'city',
         'state',
         'primaryTypeDisplayName',
-        'keywords',
-        'languages',
       ],
     });
 
@@ -334,9 +332,8 @@ export class LocationsService {
 
     void this.safeIncrementScanMetric(location.id, 'scanCount');
 
-    const questions = await this.aiSettingsService.findPublicQuestions(
-      location.id,
-    );
+    const { questions, keywords, languages } =
+      await this.aiSettingsService.findPublicForRatingPage(location.id);
 
     return new PublicLocationDto({
       id: location.id,
@@ -346,8 +343,8 @@ export class LocationsService {
       city: location.city,
       state: location.state,
       primaryTypeDisplayName: location.primaryTypeDisplayName,
-      keywords: location.keywords,
-      languages: location.languages,
+      keywords,
+      languages,
       questions,
     });
   }
@@ -542,16 +539,6 @@ export class LocationsService {
     if (updateLocationDto.types !== undefined) {
       fields.types = updateLocationDto.types.length
         ? updateLocationDto.types
-        : null;
-    }
-    if (updateLocationDto.keywords !== undefined) {
-      fields.keywords = updateLocationDto.keywords.length
-        ? updateLocationDto.keywords
-        : null;
-    }
-    if (updateLocationDto.languages !== undefined) {
-      fields.languages = updateLocationDto.languages.length
-        ? updateLocationDto.languages
         : null;
     }
 

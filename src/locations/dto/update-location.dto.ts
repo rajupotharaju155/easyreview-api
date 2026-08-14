@@ -108,14 +108,4 @@ export class UpdateLocationDto {
   @IsArray()
   @IsString({ each: true })
   types?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  keywords?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  languages?: string[];
 }
