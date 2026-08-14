@@ -1,5 +1,19 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsPositive, IsString, Max, Min, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
+
+function toOptionalBoolean({ value }: { value: unknown }): boolean | undefined {
+  if (value === true || value === 'true' || value === '1') return true;
+  if (value === false || value === 'false' || value === '0') return false;
+  return undefined;
+}
 
 export class HqQrCodesQueryDto {
   @IsOptional()
@@ -29,4 +43,10 @@ export class HqQrCodesQueryDto {
   @IsString()
   @MinLength(1)
   locationId?: string;
+
+  /** When set, assigned = locationId is present; unassigned = locationId is null. */
+  @IsOptional()
+  @Transform(toOptionalBoolean)
+  @IsBoolean()
+  assigned?: boolean;
 }
