@@ -450,11 +450,14 @@ export class HqService {
   async findQrCodes(
     query: HqQrCodesQueryDto,
   ): Promise<PaginatedResponseDto<QrCode>> {
-    const { page = 1, limit = 20, search, batchId, locationId } = query;
+    const { page = 1, limit = 20, search, batchId, locationId, assigned } =
+      query;
     const skip = (page - 1) * limit;
     const qb = this.qrCodeRepository
       .createQueryBuilder('qr')
-      .leftJoinAndSelect('qr.location', 'location')
+      .select(['qr.id', 'qr.code', 'qr.batchId', 'qr.locationId', 'qr.createdAt'])
+      .leftJoin('qr.location', 'location')
+      .addSelect(['location.id', 'location.name', 'location.slug'])
       .orderBy('qr.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
@@ -472,9 +475,26 @@ export class HqService {
       qb.andWhere('qr.locationId = :locationId', {
         locationId: locationId.trim(),
       });
+    } else if (assigned === true) {
+      qb.andWhere('qr.locationId IS NOT NULL');
+    } else if (assigned === false) {
+      qb.andWhere('qr.locationId IS NULL');
     }
 
-    const [data, total] = await qb.getManyAndCount();
+    const [rows, total] = await qb.getManyAndCount();
+    const data = rows.map((qr) => ({
+      id: qr.id,
+      code: qr.code,
+      batchId: qr.batchId,
+      locationId: qr.locationId,
+      location: qr.location
+        ? {
+            id: qr.location.id,
+            name: qr.location.name,
+            slug: qr.location.slug,
+          }
+        : null,
+    })) as QrCode[];
     return new PaginatedResponseDto(data, total, page, limit);
   }
 }
