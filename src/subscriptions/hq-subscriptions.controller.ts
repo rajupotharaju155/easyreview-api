@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { HqGuard } from '../hq/guards/hq.guard';
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { HqCreateSubscriptionDto } from './dto/hq-create-subscription.dto';
 import { HqSubscriptionsQueryDto } from './dto/hq-subscriptions-query.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { Subscription } from './entities/subscription.entity';
@@ -38,7 +38,7 @@ export class HqSubscriptionsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateSubscriptionDto): Promise<Subscription> {
+  create(@Body() dto: HqCreateSubscriptionDto): Promise<Subscription> {
     return this.subscriptionsService.createForHq(dto);
   }
 

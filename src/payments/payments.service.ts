@@ -164,6 +164,7 @@ export class PaymentsService {
       provider?: PaymentProvider;
       utr?: string;
       notes?: string | null;
+      status?: PaymentStatus;
     } = {},
   ): Promise<Payment> {
     const isComplimentary = plan.amount === 0;
@@ -172,7 +173,7 @@ export class PaymentsService {
       (isComplimentary ? PaymentProvider.CASH : PaymentProvider.UPI);
     const status = isComplimentary
       ? PaymentStatus.SUCCESS
-      : PaymentStatus.PENDING;
+      : (extras.status ?? PaymentStatus.PENDING);
 
     const payment = await this.insertPayment({
       kind: PaymentKind.SUBSCRIPTION,

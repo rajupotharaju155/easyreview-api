@@ -11,9 +11,12 @@ import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import { PaymentProvider } from '../payments/enums/payment-provider.enum';
+import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { PaymentsService } from '../payments/payments.service';
 import { Plan } from '../plans/entities/plan.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { HqCreateSubscriptionDto } from './dto/hq-create-subscription.dto';
 import { HqSubscriptionsQueryDto } from './dto/hq-subscriptions-query.dto';
 import { SubscriptionsQueryDto } from './dto/subscriptions-query.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
@@ -112,7 +115,7 @@ export class SubscriptionsService {
     return subscription;
   }
 
-  async createForHq(dto: CreateSubscriptionDto): Promise<Subscription> {
+  async createForHq(dto: HqCreateSubscriptionDto): Promise<Subscription> {
     const location = await this.findLocation(dto.locationId);
     const plan = await this.findPlan(dto.planId);
 
@@ -122,6 +125,12 @@ export class SubscriptionsService {
       source: SubscriptionSource.HQ,
       notes: dto.notes,
       startDate: dto.startDate,
+      payment: {
+        provider: dto.paymentProvider,
+        utr: dto.utr,
+        notes: dto.paymentNotes,
+        status: dto.paymentStatus ?? PaymentStatus.SUCCESS,
+      },
     });
   }
 
@@ -166,6 +175,12 @@ export class SubscriptionsService {
     source: SubscriptionSource;
     notes?: string;
     startDate?: string;
+    payment?: {
+      provider?: PaymentProvider;
+      utr?: string;
+      notes?: string | null;
+      status?: PaymentStatus;
+    };
   }): Promise<Subscription> {
     if (!input.plan.isActive) {
       throw new BadRequestException(`Plan "${input.plan.code}" is not active`);
@@ -175,6 +190,11 @@ export class SubscriptionsService {
     await this.assertNoOpenSubscription(input.location.id);
 
     const isComplimentary = input.plan.amount === 0;
+    const paymentStatus = isComplimentary
+      ? PaymentStatus.SUCCESS
+      : (input.payment?.status ?? PaymentStatus.PENDING);
+    const paymentReceived = paymentStatus === PaymentStatus.SUCCESS;
+
     const subscription = this.subscriptionRepository.create({
       locationId: input.location.id,
       userId: input.location.userId,
@@ -185,7 +205,7 @@ export class SubscriptionsService {
       cancelledAt: null,
     });
 
-    if (isComplimentary) {
+    if (isComplimentary || paymentReceived) {
       this.activate(subscription, input.plan, input.startDate);
     } else {
       subscription.status = SubscriptionStatus.PENDING_PAYMENT;
@@ -196,7 +216,10 @@ export class SubscriptionsService {
     try {
       const saved = await this.subscriptionRepository.save(subscription);
       await this.paymentsService.createForSubscription(saved, input.plan, {
-        notes: input.notes,
+        provider: input.payment?.provider,
+        utr: input.payment?.utr,
+        notes: input.payment?.notes ?? input.notes,
+        status: paymentStatus,
       });
       return this.findOneById(saved.id);
     } catch (error) {
@@ -227,7 +250,7 @@ export class SubscriptionsService {
     }
     const plan =
       subscription.plan ?? (await this.findPlan(subscription.planId));
-    this.activate(subscription, plan);
+    this.activate(subscription, plan, subscription.startDate ?? undefined);
     this.assertDateRange(subscription);
     try {
       await this.subscriptionRepository.save(subscription);
