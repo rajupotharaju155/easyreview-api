@@ -24,4 +24,6 @@ export function configurePgUtcTimestampParsers(): void {
 
   types.setTypeParser(types.builtins.TIMESTAMP, toIsoUtc);
   types.setTypeParser(types.builtins.TIMESTAMPTZ, toIsoUtc);
+  // Keep DATE as YYYY-MM-DD so IST calendar days are not shifted by JS Date.
+  types.setTypeParser(types.builtins.DATE, (value: string) => value);
 }

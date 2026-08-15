@@ -32,7 +32,11 @@ import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
 import { QrCode } from './entities/qr-code.entity';
 import { HqGuard } from './guards/hq.guard';
-import { HqService, type HqQrBatchResult } from './hq.service';
+import {
+  HqService,
+  type HqAttentionResponse,
+  type HqQrBatchResult,
+} from './hq.service';
 
 @Controller('hq')
 export class HqController {
@@ -43,6 +47,12 @@ export class HqController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
     return this.hqService.login(loginDto);
+  }
+
+  @UseGuards(HqGuard)
+  @Get('attention')
+  async getAttention(): Promise<HqAttentionResponse> {
+    return this.hqService.getAttention();
   }
 
   @UseGuards(HqGuard)

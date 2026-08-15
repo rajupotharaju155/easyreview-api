@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Not, Repository } from 'typeorm';
+import { ILike, In, Not, Repository } from 'typeorm';
 import { LoginResponseDto } from '../auth/dto/auth-response.dto';
 import { LoginDto } from '../auth/dto/login.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
@@ -20,6 +20,15 @@ import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { LocationsService } from '../locations/locations.service';
 import { STANDEE_DESIGNS } from '../orders/constants/standee.constants';
 import { Order } from '../orders/entities/order.entity';
+import { OrderStatus } from '../orders/enums/order-status.enum';
+import { Payment } from '../payments/entities/payment.entity';
+import { PaymentStatus } from '../payments/enums/payment-status.enum';
+import { Subscription } from '../subscriptions/entities/subscription.entity';
+import { SubscriptionStatus } from '../subscriptions/enums/subscription-status.enum';
+import {
+  addDaysToIsoDate,
+  todayIst,
+} from '../subscriptions/utils/ist-date.util';
 import { User } from '../users/entities/user.entity';
 import { HqAssignQrCodeDto } from './dto/hq-assign-qr-code.dto';
 import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
@@ -48,6 +57,64 @@ export type HqQrBatchResult = {
   codes: QrCode[];
 };
 
+const ATTENTION_LIMIT = 8;
+const ENDING_SOON_DAYS = 14;
+const OPEN_ORDER_STATUSES = [
+  OrderStatus.PLACED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.IN_PRODUCTION,
+  OrderStatus.SHIPPED,
+];
+
+export type HqAttentionQueue<T> = {
+  count: number;
+  items: T[];
+};
+
+export type HqAttentionResponse = {
+  locationsWithoutPlan: HqAttentionQueue<{
+    id: string;
+    name: string;
+    city: string | null;
+    userEmail: string | null;
+    createdAt: string;
+  }>;
+  subscriptionsEndingSoon: HqAttentionQueue<{
+    id: string;
+    locationId: string;
+    locationName: string | null;
+    planName: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  }>;
+  subscriptionsOverdue: HqAttentionQueue<{
+    id: string;
+    locationId: string;
+    locationName: string | null;
+    planName: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  }>;
+  pendingPayments: HqAttentionQueue<{
+    id: string;
+    kind: string;
+    amount: number;
+    currency: string;
+    provider: string | null;
+    locationId: string;
+    locationName: string | null;
+    orderId: string | null;
+    createdAt: Date;
+  }>;
+  openOrders: HqAttentionQueue<{
+    id: string;
+    businessNameSnapshot: string;
+    status: OrderStatus;
+    locationId: string;
+    createdAt: Date;
+  }>;
+};
+
 @Injectable()
 export class HqService {
   constructor(
@@ -62,6 +129,10 @@ export class HqService {
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(QrCode)
     private readonly qrCodeRepository: Repository<QrCode>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionRepository: Repository<Subscription>,
   ) {}
 
   /**
@@ -78,6 +149,160 @@ export class HqService {
       throw new UnauthorizedException('Invalid credentials');
     }
     return generateHqTokens(email, this.jwtService, this.configService);
+  }
+
+  /**
+   * Home queues: locations without live access, subscriptions ending
+   * soon or overdue, pending payments, and open orders.
+   */
+  async getAttention(): Promise<HqAttentionResponse> {
+    const today = todayIst();
+    const endingSoonUntil = addDaysToIsoDate(today, ENDING_SOON_DAYS);
+
+    const locationsWithoutPlanQb = this.locationRepository
+      .createQueryBuilder('location')
+      .leftJoin(
+        Subscription,
+        'activeSub',
+        'activeSub.locationId = location.id AND activeSub.status = :activeStatus AND activeSub.endDate >= :today',
+        { activeStatus: SubscriptionStatus.ACTIVE, today },
+      )
+      .where('activeSub.id IS NULL');
+
+    const pendingPaymentsQb = this.paymentRepository
+      .createQueryBuilder('payment')
+      .innerJoinAndSelect('payment.location', 'location')
+      .where('payment.status = :status', { status: PaymentStatus.PENDING })
+      .orderBy('payment.createdAt', 'DESC');
+
+    const endingSoonQb = this.subscriptionRepository
+      .createQueryBuilder('subscription')
+      .innerJoinAndSelect('subscription.plan', 'plan')
+      .innerJoinAndSelect('subscription.location', 'location')
+      .where('subscription.status = :status', {
+        status: SubscriptionStatus.ACTIVE,
+      })
+      .andWhere('subscription.endDate >= :today', { today })
+      .andWhere('subscription.endDate <= :until', { until: endingSoonUntil })
+      .orderBy('subscription.endDate', 'ASC');
+
+    const overdueQb = this.subscriptionRepository
+      .createQueryBuilder('subscription')
+      .innerJoinAndSelect('subscription.plan', 'plan')
+      .innerJoinAndSelect('subscription.location', 'location')
+      .leftJoin(
+        Subscription,
+        'liveSub',
+        'liveSub.locationId = subscription.locationId AND liveSub.status = :activeStatus AND liveSub.endDate >= :today',
+        { activeStatus: SubscriptionStatus.ACTIVE, today },
+      )
+      .where('liveSub.id IS NULL')
+      .andWhere('subscription.endDate < :today', { today })
+      .andWhere('subscription.status IN (:...overdueStatuses)', {
+        overdueStatuses: [
+          SubscriptionStatus.ACTIVE,
+          SubscriptionStatus.EXPIRED,
+        ],
+      })
+      .orderBy('subscription.endDate', 'DESC');
+
+    const [
+      locationsWithoutPlanCount,
+      locationsWithoutPlan,
+      pendingPaymentsCount,
+      pendingPayments,
+      openOrdersCount,
+      openOrders,
+      subscriptionsEndingSoonCount,
+      subscriptionsEndingSoon,
+      subscriptionsOverdueCount,
+      subscriptionsOverdue,
+    ] = await Promise.all([
+      locationsWithoutPlanQb.clone().getCount(),
+      locationsWithoutPlanQb
+        .clone()
+        .leftJoinAndSelect('location.user', 'user')
+        .orderBy('location.createdAt', 'DESC')
+        .take(ATTENTION_LIMIT)
+        .getMany(),
+      pendingPaymentsQb.clone().getCount(),
+      pendingPaymentsQb.clone().take(ATTENTION_LIMIT).getMany(),
+      this.orderRepository.count({
+        where: { status: In(OPEN_ORDER_STATUSES) },
+      }),
+      this.orderRepository.find({
+        where: { status: In(OPEN_ORDER_STATUSES) },
+        order: { createdAt: 'DESC' },
+        take: ATTENTION_LIMIT,
+      }),
+      endingSoonQb.clone().getCount(),
+      endingSoonQb.clone().take(ATTENTION_LIMIT).getMany(),
+      overdueQb.clone().getCount(),
+      overdueQb.clone().take(ATTENTION_LIMIT).getMany(),
+    ]);
+
+    return {
+      locationsWithoutPlan: {
+        count: locationsWithoutPlanCount,
+        items: locationsWithoutPlan.map((location) => ({
+          id: location.id,
+          name: location.name,
+          city: location.city,
+          userEmail: location.user?.email ?? null,
+          createdAt:
+            location.createdAt instanceof Date
+              ? location.createdAt.toISOString()
+              : String(location.createdAt),
+        })),
+      },
+      subscriptionsEndingSoon: {
+        count: subscriptionsEndingSoonCount,
+        items: subscriptionsEndingSoon.map((subscription) =>
+          this.toAttentionSubscription(subscription),
+        ),
+      },
+      subscriptionsOverdue: {
+        count: subscriptionsOverdueCount,
+        items: subscriptionsOverdue.map((subscription) =>
+          this.toAttentionSubscription(subscription),
+        ),
+      },
+      pendingPayments: {
+        count: pendingPaymentsCount,
+        items: pendingPayments.map((payment) => ({
+          id: payment.id,
+          kind: payment.kind,
+          amount: payment.amount,
+          currency: payment.currency,
+          provider: payment.provider,
+          locationId: payment.locationId,
+          locationName: payment.location?.name ?? null,
+          orderId: payment.orderId,
+          createdAt: payment.createdAt,
+        })),
+      },
+      openOrders: {
+        count: openOrdersCount,
+        items: openOrders.map((order) => ({
+          id: order.id,
+          businessNameSnapshot: order.businessNameSnapshot,
+          status: order.status,
+          locationId: order.locationId,
+          createdAt: order.createdAt,
+        })),
+      },
+    };
+  }
+
+  private toAttentionSubscription(subscription: Subscription) {
+    return {
+      id: subscription.id,
+      locationId: subscription.locationId,
+      locationName: subscription.location?.name ?? null,
+      planName: subscription.plan?.name ?? null,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+    };
   }
 
   /**

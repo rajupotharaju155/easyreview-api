@@ -18,7 +18,10 @@ import { HqModule } from './hq/hq.module';
 import { InternalJobsModule } from './internal-jobs/internal-jobs.module';
 import { LocationsModule } from './locations/locations.module';
 import { OrdersModule } from './orders/orders.module';
+import { PlansModule } from './plans/plans.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PrivateFeedbackModule } from './private-feedback/private-feedback.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ReviewModule } from './review/review.module';
 import { UsersModule } from './users/users.module';
 
@@ -70,6 +73,9 @@ const ignoreEnvFile =
     LocationsModule,
     AiSettingsModule,
     OrdersModule,
+    PlansModule,
+    SubscriptionsModule,
+    PaymentsModule,
     PrivateFeedbackModule,
     ReviewModule,
     EmailModule,

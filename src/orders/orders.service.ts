@@ -12,6 +12,7 @@ import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { EmailService } from '../email/email.service';
 import type { OrderConfirmationEmailDetails } from '../email/templates/email.templates';
 import { Location } from '../locations/entities/location.entity';
+import { PaymentsService } from '../payments/payments.service';
 import {
   STANDEE_DESIGNS,
   STANDEE_PRICE_INR,
@@ -52,6 +53,7 @@ export class OrdersService {
     private readonly locationRepository: Repository<Location>,
     private readonly currentUserUtil: CurrentUserUtil,
     private readonly emailService: EmailService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
@@ -86,14 +88,17 @@ export class OrdersService {
       statusNote: null,
     });
     const savedOrder = await this.orderRepository.save(order);
-    void this.sendOrderConfirmationEmail(savedOrder, user.email, user.name).catch(
-      (error: unknown) => {
-        this.logger.error(
-          `Failed to send order confirmation email for order ${savedOrder.id}`,
-          error instanceof Error ? error.stack : undefined,
-        );
-      },
-    );
+    await this.paymentsService.createForOrder(savedOrder);
+    void this.sendOrderConfirmationEmail(
+      savedOrder,
+      user.email,
+      user.name,
+    ).catch((error: unknown) => {
+      this.logger.error(
+        `Failed to send order confirmation email for order ${savedOrder.id}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    });
     return savedOrder;
   }
 
