@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsInt,
   IsOptional,
@@ -12,7 +14,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { PlanEntitlementsDto } from './plan-entitlements.dto';
+import { PlanFeatureDto } from './plan-feature.dto';
 
 function trimString({ value }: { value: unknown }): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -73,9 +75,11 @@ export class UpdatePlanDto {
   sortOrder?: number;
 
   @IsOptional()
-  @ValidateNested()
-  @Type(() => PlanEntitlementsDto)
-  entitlements?: PlanEntitlementsDto;
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => PlanFeatureDto)
+  features?: PlanFeatureDto[];
 
   @IsOptional()
   @Transform(emptyToNull)

@@ -9,7 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
-import { type PlanEntitlements } from '../constants/plan-entitlements';
+import { type PlanFeature } from '../constants/plan-feature';
 
 @Entity('plans')
 @Index(['code'], {
@@ -45,8 +45,8 @@ export class Plan {
   @Column({ type: 'int', default: 0 })
   sortOrder: number;
 
-  @Column({ type: 'jsonb' })
-  entitlements: PlanEntitlements;
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  features: PlanFeature[];
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   gatewayPlanId: string | null;

@@ -1,4 +1,8 @@
-import type { PlanEntitlements } from './plan-entitlements';
+import {
+  CORE_PLAN_FEATURES,
+  planFeature,
+  type PlanFeature,
+} from './plan-feature';
 
 export const PLAN_CODES = {
   QUICK_TRIAL: 'quick_trial',
@@ -16,14 +20,15 @@ export type PlanSeed = {
   durationDays: number;
   isActive: boolean;
   sortOrder: number;
-  entitlements: PlanEntitlements;
+  features: PlanFeature[];
 };
 
-const STARTER_ENTITLEMENTS: PlanEntitlements = {
-  multiLanguageAi: true,
-  standeeIncluded: true,
-  nfcIncluded: false,
-};
+const STARTER_FEATURES: PlanFeature[] = [
+  ...CORE_PLAN_FEATURES,
+  planFeature('multi_language_ai', 'Multi-language AI drafts', true),
+  planFeature('qr_standee', '1 QR Standee', true),
+  planFeature('nfc_card', 'NFC card', false),
+];
 
 export const DEFAULT_PLANS: PlanSeed[] = [
   {
@@ -34,11 +39,12 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     durationDays: 7,
     isActive: true,
     sortOrder: 1,
-    entitlements: {
-      multiLanguageAi: false,
-      standeeIncluded: false,
-      nfcIncluded: false,
-    },
+    features: [
+      ...CORE_PLAN_FEATURES,
+      planFeature('multi_language_ai', 'Multi-language AI drafts', false),
+      planFeature('qr_standee', 'QR Standee', false),
+      planFeature('nfc_card', 'NFC card', false),
+    ],
   },
   {
     code: PLAN_CODES.STARTER,
@@ -48,7 +54,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     durationDays: 30,
     isActive: true,
     sortOrder: 2,
-    entitlements: STARTER_ENTITLEMENTS,
+    features: STARTER_FEATURES,
   },
   {
     code: PLAN_CODES.GROWTH,
@@ -58,7 +64,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     durationDays: 180,
     isActive: true,
     sortOrder: 3,
-    entitlements: STARTER_ENTITLEMENTS,
+    features: STARTER_FEATURES,
   },
   {
     code: PLAN_CODES.BUSINESS_PRO,
@@ -68,11 +74,13 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     durationDays: 365,
     isActive: true,
     sortOrder: 4,
-    entitlements: {
-      multiLanguageAi: true,
-      standeeIncluded: true,
-      nfcIncluded: true,
-    },
+    features: [
+      ...CORE_PLAN_FEATURES,
+      planFeature('multi_language_ai', 'Multi-language AI drafts', true),
+      planFeature('qr_standee', '1 QR Standee', true),
+      planFeature('nfc_card', '1 NFC card', true),
+      planFeature('priority_whatsapp', 'Priority WhatsApp support', true),
+    ],
   },
   {
     code: PLAN_CODES.FREE_TRIAL,
@@ -82,6 +90,6 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     durationDays: 14,
     isActive: true,
     sortOrder: 99,
-    entitlements: STARTER_ENTITLEMENTS,
+    features: STARTER_FEATURES,
   },
 ];

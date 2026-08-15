@@ -8,7 +8,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { LoggerService } from '../common/services/logger.service';
 import { DEFAULT_PLANS } from './constants/default-plans';
-import { mergePlanEntitlements } from './constants/plan-entitlements';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { HqPlansQueryDto } from './dto/hq-plans-query.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
@@ -81,7 +80,7 @@ export class PlansService implements OnModuleInit {
         durationDays: dto.durationDays,
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
-        entitlements: mergePlanEntitlements(dto.entitlements),
+        features: dto.features ?? [],
         gatewayPlanId: dto.gatewayPlanId ?? null,
       });
       return await this.planRepository.save(plan);
@@ -103,12 +102,7 @@ export class PlansService implements OnModuleInit {
     if (dto.durationDays !== undefined) plan.durationDays = dto.durationDays;
     if (dto.isActive !== undefined) plan.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) plan.sortOrder = dto.sortOrder;
-    if (dto.entitlements !== undefined) {
-      plan.entitlements = mergePlanEntitlements({
-        ...plan.entitlements,
-        ...dto.entitlements,
-      });
-    }
+    if (dto.features !== undefined) plan.features = dto.features;
     if (dto.gatewayPlanId !== undefined) {
       plan.gatewayPlanId = dto.gatewayPlanId;
     }
@@ -137,6 +131,11 @@ export class PlansService implements OnModuleInit {
         withDeleted: true,
       });
       if (existing) {
+        if (!existing.deletedAt && !hasPlanFeatures(existing.features)) {
+          existing.features = seed.features;
+          await this.planRepository.save(existing);
+          this.logger.log(`Migrated plan features for "${seed.code}"`);
+        }
         continue;
       }
 
@@ -152,4 +151,15 @@ export class PlansService implements OnModuleInit {
         .driverError?.code === '23505'
     );
   }
+}
+
+function hasPlanFeatures(features: unknown): boolean {
+  return (
+    Array.isArray(features) &&
+    features.length > 0 &&
+    typeof features[0] === 'object' &&
+    features[0] !== null &&
+    'id' in features[0] &&
+    'isIncluded' in features[0]
+  );
 }
