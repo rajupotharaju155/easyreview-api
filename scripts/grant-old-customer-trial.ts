@@ -20,13 +20,12 @@ import { Subscription } from '../src/subscriptions/entities/subscription.entity'
 import { SubscriptionSource } from '../src/subscriptions/enums/subscription-source.enum';
 import { SubscriptionStatus } from '../src/subscriptions/enums/subscription-status.enum';
 
-const PLAN_ID = 'vJKnLXFSojKUH4K1';
+const PLAN_ID = 'ezcZIEEFhfzbsYfD';
 const PLAN_CODE = 'free_trial';
 const TRIAL_DAYS = 30;
 const NOTES = '30 Days FREE Subscription for old customers';
 
 const LOCATION_IDS: string[] = [
-  // 'NQSeLKm0sz3NxJ4V',
 ];
 
 function loadEnvironmentConfig(): void {

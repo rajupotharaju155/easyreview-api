@@ -12,7 +12,7 @@ import { DataSource } from 'typeorm';
 import { getPostgresConnectionOptions } from '../src/database/postgres.config';
 import { Location } from '../src/locations/entities/location.entity';
 
-const LOOKBACK_DAYS = 14;
+const LOOKBACK_DAYS = 7;
 
 function loadEnvironmentConfig(): void {
   const nodeEnv = process.env.NODE_ENV;
