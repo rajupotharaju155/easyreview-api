@@ -382,13 +382,23 @@ export class SubscriptionsService {
     limit: number,
   ): Promise<PaginatedResponseDto<Subscription>> {
     const skip = (page - 1) * limit;
-    const [data, total] = await this.subscriptionRepository.findAndCount({
-      where,
-      relations: { plan: true },
-      order: { createdAt: 'DESC' },
-      skip,
-      take: limit,
-    });
+    const [data, total] = await this.subscriptionRepository
+      .createQueryBuilder('subscription')
+      .leftJoin('subscription.plan', 'plan')
+      .addSelect([
+        'plan.id',
+        'plan.code',
+        'plan.name',
+        'plan.amount',
+        'plan.currency',
+      ])
+      .leftJoin('subscription.location', 'location')
+      .addSelect(['location.id', 'location.name'])
+      .setFindOptions({ where })
+      .orderBy('subscription.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
     return new PaginatedResponseDto(data, total, page, limit);
   }
 
