@@ -100,7 +100,7 @@ export type HqAttentionResponse = {
     kind: string;
     amount: number;
     currency: string;
-    provider: string;
+    provider: string | null;
     locationId: string;
     locationName: string | null;
     orderId: string | null;

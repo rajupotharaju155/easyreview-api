@@ -161,7 +161,7 @@ export class PaymentsService {
     subscription: Subscription,
     plan: Plan,
     extras: {
-      provider?: PaymentProvider;
+      provider?: PaymentProvider | null;
       utr?: string;
       notes?: string | null;
       status?: PaymentStatus;
@@ -169,8 +169,11 @@ export class PaymentsService {
   ): Promise<Payment> {
     const isComplimentary = plan.amount === 0;
     const provider =
-      extras.provider ??
-      (isComplimentary ? PaymentProvider.CASH : PaymentProvider.UPI);
+      extras.provider !== undefined
+        ? extras.provider
+        : isComplimentary
+          ? PaymentProvider.CASH
+          : PaymentProvider.UPI;
     const status = isComplimentary
       ? PaymentStatus.SUCCESS
       : (extras.status ?? PaymentStatus.PENDING);
@@ -201,15 +204,18 @@ export class PaymentsService {
   async createForOrder(
     order: Order,
     extras: {
-      provider?: PaymentProvider;
+      provider?: PaymentProvider | null;
       utr?: string;
       notes?: string | null;
     } = {},
   ): Promise<Payment> {
     const isComplimentary = order.amountInr === 0;
     const provider =
-      extras.provider ??
-      (isComplimentary ? PaymentProvider.CASH : PaymentProvider.UPI);
+      extras.provider !== undefined
+        ? extras.provider
+        : isComplimentary
+          ? PaymentProvider.CASH
+          : PaymentProvider.UPI;
     const status = isComplimentary
       ? PaymentStatus.SUCCESS
       : PaymentStatus.PENDING;

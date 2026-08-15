@@ -89,8 +89,8 @@ export class Payment {
   @Column({ type: 'varchar', length: 16 })
   status: PaymentStatus;
 
-  @Column({ type: 'varchar', length: 16 })
-  provider: PaymentProvider;
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  provider: PaymentProvider | null;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   utr: string | null;
