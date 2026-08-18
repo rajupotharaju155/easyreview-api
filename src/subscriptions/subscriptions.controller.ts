@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  StreamableFile,
+} from '@nestjs/common';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { SubscriptionsQueryDto } from './dto/subscriptions-query.dto';
@@ -14,6 +22,16 @@ export class SubscriptionsController {
     @Query() query: SubscriptionsQueryDto,
   ): Promise<PaginatedResponseDto<Subscription>> {
     return this.subscriptionsService.findAllForUser(query);
+  }
+
+  @Get(':id/invoice')
+  async downloadInvoice(@Param('id') id: string): Promise<StreamableFile> {
+    const { pdf, filename } =
+      await this.subscriptionsService.getInvoicePdfForUser(id);
+    return new StreamableFile(Buffer.from(pdf), {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Get(':id')

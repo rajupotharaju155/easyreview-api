@@ -64,6 +64,25 @@ export class PaymentsService {
     return payment;
   }
 
+  async findLatestForSubscription(
+    subscriptionId: string,
+    userId: string,
+  ): Promise<Payment | null> {
+    const payments = await this.paymentRepository.find({
+      where: {
+        subscriptionId,
+        userId,
+        kind: PaymentKind.SUBSCRIPTION,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    return (
+      payments.find((payment) => payment.status === PaymentStatus.SUCCESS) ??
+      payments[0] ??
+      null
+    );
+  }
+
   async submitForUser(id: string, dto: SubmitPaymentDto): Promise<Payment> {
     const payment = await this.findOneForUser(id);
     if (payment.status !== PaymentStatus.PENDING) {

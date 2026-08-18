@@ -11,6 +11,7 @@ import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import { Payment } from '../payments/entities/payment.entity';
 import { PaymentProvider } from '../payments/enums/payment-provider.enum';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { PaymentsService } from '../payments/payments.service';
@@ -23,6 +24,10 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionSource } from './enums/subscription-source.enum';
 import { SubscriptionStatus } from './enums/subscription-status.enum';
+import {
+  buildSubscriptionInvoicePdf,
+  type InvoicePayload,
+} from './utils/invoice-pdf';
 import { endDateFromDuration, todayIst } from './utils/ist-date.util';
 
 @Injectable()
@@ -66,6 +71,33 @@ export class SubscriptionsService {
       throw new NotFoundException(`Subscription with id "${id}" not found`);
     }
     return subscription;
+  }
+
+  async getInvoicePdfForUser(
+    id: string,
+  ): Promise<{ pdf: Uint8Array; filename: string }> {
+    const userId = this.currentUserUtil.getCurrentUserId();
+    await this.expireOverdue({ userId });
+
+    const subscription = await this.subscriptionRepository.findOne({
+      where: { id, userId },
+      relations: { plan: true, location: true, user: true },
+    });
+    if (!subscription) {
+      throw new NotFoundException(`Subscription with id "${id}" not found`);
+    }
+
+    const payment = await this.paymentsService.findLatestForSubscription(
+      subscription.id,
+      userId,
+    );
+    const pdf = await buildSubscriptionInvoicePdf(
+      this.toInvoicePayload(subscription, payment),
+    );
+    return {
+      pdf,
+      filename: `easyreview-invoice-${subscription.id}.pdf`,
+    };
   }
 
   async createForUser(dto: CreateSubscriptionDto): Promise<Subscription> {
@@ -434,6 +466,41 @@ export class SubscriptionsService {
     return plan;
   }
 
+  private toInvoicePayload(
+    subscription: Subscription,
+    payment: Payment | null,
+  ): InvoicePayload {
+    const plan = subscription.plan;
+    const location = subscription.location;
+    const amount = payment?.amount ?? plan?.amount ?? 0;
+    const currency = payment?.currency ?? plan?.currency ?? 'INR';
+    const issuedAt =
+      payment?.succeededAt ??
+      payment?.createdAt ??
+      subscription.startDate ??
+      subscription.createdAt;
+
+    return {
+      invoiceNumber: `INV-${payment?.id ?? subscription.id}`,
+      issuedAtLabel: formatInvoiceDate(issuedAt),
+      billToName: location?.name ?? 'Business',
+      billToLines: billToLines(subscription),
+      planName: plan?.name ?? 'Subscription',
+      periodLabel: formatPeriod(subscription.startDate, subscription.endDate),
+      amountLabel: formatInvoiceAmount(amount, currency),
+      paymentStatusLabel: paymentStatusLabel(
+        payment,
+        amount,
+        subscription.status,
+      ),
+      paymentProviderLabel: formatProvider(payment?.provider ?? null),
+      utr: payment?.utr ?? null,
+      paymentId: payment?.id ?? null,
+      subscriptionId: subscription.id,
+      locationName: location?.name ?? '-',
+    };
+  }
+
   private throwIfUniqueViolation(error: unknown): void {
     if (
       error instanceof QueryFailedError &&
@@ -445,4 +512,84 @@ export class SubscriptionsService {
       );
     }
   }
+}
+
+function formatInvoiceDate(value: Date | string | null | undefined): string {
+  if (!value) return '-';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(
+      'en-IN',
+      {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      },
+    );
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+function formatPeriod(start: string | null, end: string | null): string {
+  if (!start && !end) return '-';
+  return `${formatInvoiceDate(start)} - ${formatInvoiceDate(end)}`;
+}
+
+function formatInvoiceAmount(amount: number, currency: string): string {
+  if (amount === 0) return 'Free';
+  const formatted = amount.toLocaleString('en-IN');
+  if (currency === 'INR') return `Rs. ${formatted}`;
+  return `${currency} ${formatted}`;
+}
+
+function formatProvider(provider: string | null): string | null {
+  if (!provider) return null;
+  return provider.replaceAll('_', ' ').toUpperCase();
+}
+
+function paymentStatusLabel(
+  payment: Payment | null,
+  amount: number,
+  subscriptionStatus: SubscriptionStatus,
+): string {
+  if (payment?.status === PaymentStatus.SUCCESS) {
+    return amount === 0 ? 'Complimentary' : 'Paid';
+  }
+  if (payment?.status === PaymentStatus.PENDING) return 'Unpaid';
+  if (payment?.status === PaymentStatus.REFUNDED) return 'Refunded';
+  if (payment?.status === PaymentStatus.FAILED) return 'Failed';
+  if (amount === 0) return 'Complimentary';
+  if (subscriptionStatus === SubscriptionStatus.PENDING_PAYMENT)
+    return 'Unpaid';
+  return 'Paid';
+}
+
+function billToLines(subscription: Subscription): string[] {
+  const location = subscription.location;
+  const user = subscription.user;
+  const lines: string[] = [];
+  if (user?.name) lines.push(user.name);
+  if (user?.email) lines.push(user.email);
+  if (location?.formattedAddress) {
+    lines.push(location.formattedAddress);
+  } else {
+    const parts = [
+      location?.addressLine1,
+      location?.city,
+      location?.state,
+      location?.pincode,
+      location?.country,
+    ].filter((part): part is string => Boolean(part));
+    if (parts.length > 0) lines.push(parts.join(', '));
+  }
+  if (location?.phoneNumber) lines.push(location.phoneNumber);
+  return lines;
 }
