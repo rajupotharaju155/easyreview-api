@@ -211,7 +211,7 @@ export class ReviewService {
       targetWordCount: wordCount,
     }));
     const answerLines = answers.map(
-      ({ question, answer }) => `- ${question}: ${answer}`,
+      ({ question, answers: selected }) => `- ${question}: ${selected.join(', ')}`,
     );
 
     return [
@@ -242,6 +242,7 @@ export class ReviewService {
         ? [
             '- Ground every draft in the visit details above; treat them as facts about this specific customer.',
             '- Work those details into the sentences. Never list them or echo the question wording.',
+            '- If the customer named several things, include all of them naturally — they are all true of this visit.',
           ]
         : []),
       dto.primaryTypeDisplayName
