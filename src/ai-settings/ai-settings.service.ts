@@ -14,7 +14,7 @@ import { AiQuestion, AiSettings } from './entities/ai-settings.entity';
 
 export type SubmittedAnswer = {
   question: string;
-  answer: string;
+  answers: string[];
 };
 
 @Injectable()
@@ -99,7 +99,9 @@ export class AiSettingsService {
     });
 
     return {
-      questions: settings?.questionsEnabled ? (settings.questions ?? []) : [],
+      questions: settings?.questionsEnabled
+        ? this.withQuestionDefaults(settings.questions)
+        : [],
       keywords: settings?.keywords ?? null,
       languages: settings?.languages ?? null,
     };
@@ -144,15 +146,6 @@ export class AiSettingsService {
         );
       }
 
-      const option = question.options.find((candidate) =>
-        this.isSameText(candidate, submitted.answer),
-      );
-      if (!option) {
-        throw new BadRequestException(
-          `"${submitted.answer}" is not an option for "${question.question}"`,
-        );
-      }
-
       const key = question.question.toLowerCase();
       if (answered.has(key)) {
         throw new BadRequestException(
@@ -161,7 +154,34 @@ export class AiSettingsService {
       }
       answered.add(key);
 
-      resolved.push({ question: question.question, answer: option });
+      if (!question.multiSelect && submitted.answers.length > 1) {
+        throw new BadRequestException(
+          `"${question.question}" allows only one answer`,
+        );
+      }
+
+      const resolvedOptions: string[] = [];
+      const seenOptions = new Set<string>();
+
+      for (const submittedAnswer of submitted.answers) {
+        const option = question.options.find((candidate) =>
+          this.isSameText(candidate, submittedAnswer),
+        );
+        if (!option) {
+          throw new BadRequestException(
+            `"${submittedAnswer}" is not an option for "${question.question}"`,
+          );
+        }
+
+        const optionKey = option.toLowerCase();
+        if (seenOptions.has(optionKey)) {
+          continue;
+        }
+        seenOptions.add(optionKey);
+        resolvedOptions.push(option);
+      }
+
+      resolved.push({ question: question.question, answers: resolvedOptions });
     }
 
     return resolved;
@@ -173,11 +193,21 @@ export class AiSettingsService {
   ): AiSettingsResponseDto {
     return new AiSettingsResponseDto({
       locationId,
-      questions: settings?.questions ?? [],
+      questions: this.withQuestionDefaults(settings?.questions),
       questionsEnabled: settings?.questionsEnabled ?? true,
       keywords: settings?.keywords ?? [],
       languages: settings?.languages ?? [],
     });
+  }
+
+  private withQuestionDefaults(
+    questions: AiQuestion[] | null | undefined,
+  ): AiQuestion[] {
+    return (questions ?? []).map((item) => ({
+      question: item.question,
+      options: item.options,
+      multiSelect: Boolean(item.multiSelect),
+    }));
   }
 
   private normalizeStringList(
@@ -228,7 +258,11 @@ export class AiSettingsService {
         seenOptions.add(optionKey);
       }
 
-      return { question: item.question, options: [...item.options] };
+      return {
+        question: item.question,
+        options: [...item.options],
+        multiSelect: Boolean(item.multiSelect),
+      };
     });
   }
 

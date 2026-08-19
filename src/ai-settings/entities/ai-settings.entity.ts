@@ -12,9 +12,9 @@ import {
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { Location } from '../../locations/entities/location.entity';
 
-export const AI_MAX_QUESTIONS = 2;
-export const AI_MIN_OPTIONS = 3;
-export const AI_MAX_OPTIONS = 4;
+export const AI_MAX_QUESTIONS = 5;
+export const AI_MIN_OPTIONS = 2;
+export const AI_MAX_OPTIONS = 10;
 export const AI_QUESTION_MAX_LENGTH = 120;
 export const AI_OPTION_MAX_LENGTH = 40;
 export const AI_MAX_KEYWORDS = 20;
@@ -25,6 +25,8 @@ export const AI_LANGUAGE_MAX_LENGTH = 40;
 export type AiQuestion = {
   question: string;
   options: string[];
+  /** When true, the customer can tap several options for this question. */
+  multiSelect?: boolean;
 };
 
 @Entity('ai_settings')

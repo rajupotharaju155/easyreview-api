@@ -3,6 +3,8 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
+  IsOptional,
   IsString,
   MaxLength,
   MinLength,
@@ -40,4 +42,8 @@ export class AiQuestionDto {
   @MinLength(1, { each: true })
   @MaxLength(AI_OPTION_MAX_LENGTH, { each: true })
   options: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  multiSelect?: boolean;
 }

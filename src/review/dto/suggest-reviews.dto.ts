@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  AI_MAX_OPTIONS,
   AI_MAX_QUESTIONS,
   AI_OPTION_MAX_LENGTH,
   AI_QUESTION_MAX_LENGTH,
@@ -28,6 +29,13 @@ function trimString({ value }: { value: unknown }): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
 
+function trimEach({ value }: { value: unknown }): unknown {
+  if (!Array.isArray(value)) return value;
+  return (value as unknown[]).map((item) =>
+    typeof item === 'string' ? item.trim() : item,
+  );
+}
+
 export class ReviewAnswerDto {
   @Transform(trimString)
   @IsString()
@@ -35,11 +43,14 @@ export class ReviewAnswerDto {
   @MaxLength(AI_QUESTION_MAX_LENGTH)
   question: string;
 
-  @Transform(trimString)
-  @IsString()
-  @MinLength(1)
-  @MaxLength(AI_OPTION_MAX_LENGTH)
-  answer: string;
+  @Transform(trimEach)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(AI_MAX_OPTIONS)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(AI_OPTION_MAX_LENGTH, { each: true })
+  answers: string[];
 }
 
 export class SuggestReviewsDto {
