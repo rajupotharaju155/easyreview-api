@@ -1,8 +1,12 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
+  IsInt,
+  IsOptional,
   IsString,
   Matches,
+  Max,
+  Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -22,6 +26,13 @@ export class CreateOrderDto {
 
   @IsEnum(DesignVariant)
   designVariant: DesignVariant;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: 'Quantity must be at least 1' })
+  @Max(50, { message: 'Quantity cannot exceed 50' })
+  quantity?: number;
 
   @IsEnum(DeliveryTo)
   deliveryTo: DeliveryTo;

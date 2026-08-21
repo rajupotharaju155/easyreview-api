@@ -13,10 +13,7 @@ import { EmailService } from '../email/email.service';
 import type { OrderConfirmationEmailDetails } from '../email/templates/email.templates';
 import { Location } from '../locations/entities/location.entity';
 import { PaymentsService } from '../payments/payments.service';
-import {
-  STANDEE_DESIGNS,
-  STANDEE_PRICE_INR,
-} from './constants/standee.constants';
+import { STANDEE_DESIGNS } from './constants/standee.constants';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order } from './entities/order.entity';
 import { DeliveryTo } from './enums/delivery-to.enum';
@@ -67,6 +64,7 @@ export class OrdersService {
       );
     }
     const design = STANDEE_DESIGNS[createOrderDto.designVariant];
+    const quantity = createOrderDto.quantity ?? 1;
     const deliveryAddress = this.resolveDeliveryAddress(
       createOrderDto,
       location,
@@ -76,7 +74,8 @@ export class OrdersService {
       locationId: location.id,
       designVariant: createOrderDto.designVariant,
       designName: design.name,
-      amountInr: STANDEE_PRICE_INR,
+      amountInr: design.priceInr * quantity,
+      quantity,
       businessNameSnapshot: location.name,
       deliveryTo: createOrderDto.deliveryTo,
       addressLine1: deliveryAddress.addressLine1,
@@ -146,6 +145,7 @@ export class OrdersService {
       orderId: order.id,
       designName: order.designName,
       businessName: order.businessNameSnapshot,
+      quantity: order.quantity,
       amountInr: order.amountInr,
       phoneNumber: order.phoneNumber,
       deliveryAddress: deliveryAddress || 'Address on file',
