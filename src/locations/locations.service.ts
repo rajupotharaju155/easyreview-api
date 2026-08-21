@@ -1,5 +1,7 @@
 import {
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -32,6 +34,7 @@ import { LocationScanMetric } from './entities/location-scan-metric.entity';
 import { Location } from './entities/location.entity';
 import { Review } from './entities/review.entity';
 import { GooglePlacesService } from '../services/google-places.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 type ScanMetricField = 'scanCount' | 'aiReviewCount' | 'redirectToGoogleCount';
 
@@ -57,6 +60,7 @@ export class LocationsService {
     private readonly googlePlacesService: GooglePlacesService,
     private readonly currentUserUtil: CurrentUserUtil,
     private readonly aiSettingsService: AiSettingsService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async create(
@@ -328,6 +332,15 @@ export class LocationsService {
 
     if (!location || !location.slug) {
       throw new NotFoundException(`Location with slug "${slug}" not found`);
+    }
+
+    const hasActiveSubscription =
+      await this.subscriptionsService.hasActiveForLocation(location.id);
+    if (!hasActiveSubscription) {
+      throw new HttpException(
+        'This business does not have an active subscription',
+        HttpStatus.PAYMENT_REQUIRED,
+      );
     }
 
     void this.safeIncrementScanMetric(location.id, 'scanCount');
