@@ -7,7 +7,12 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
+import {
+  FindOptionsWhere,
+  MoreThanOrEqual,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
@@ -57,6 +62,19 @@ export class SubscriptionsService {
     }
 
     return this.paginate(where, page, limit);
+  }
+
+  /** Live access: an active subscription whose end date has not passed (IST). */
+  async hasActiveForLocation(locationId: string): Promise<boolean> {
+    const active = await this.subscriptionRepository.findOne({
+      where: {
+        locationId,
+        status: SubscriptionStatus.ACTIVE,
+        endDate: MoreThanOrEqual(todayIst()),
+      },
+      select: ['id'],
+    });
+    return Boolean(active);
   }
 
   async findOneForUser(id: string): Promise<Subscription> {
