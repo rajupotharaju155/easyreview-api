@@ -75,6 +75,7 @@ export type OrderConfirmationEmailDetails = {
   orderId: string;
   designName: string;
   businessName: string;
+  quantity: number;
   amountInr: number;
   phoneNumber: string;
   deliveryAddress: string;
@@ -121,6 +122,10 @@ export function orderConfirmationEmailHtml(
       <tr>
         <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Business</td>
         <td style="padding: 6px 0; font-weight: 600;">${businessName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Quantity</td>
+        <td style="padding: 6px 0; font-weight: 600;">${details.quantity}</td>
       </tr>
       <tr>
         <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Amount</td>
@@ -177,6 +182,10 @@ export function adminOrderReceivedEmailHtml(
       <tr>
         <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Business</td>
         <td style="padding: 6px 0; font-weight: 600;">${businessName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Quantity</td>
+        <td style="padding: 6px 0; font-weight: 600;">${details.quantity}</td>
       </tr>
       <tr>
         <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Amount</td>

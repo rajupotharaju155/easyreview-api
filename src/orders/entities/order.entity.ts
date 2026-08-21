@@ -50,6 +50,9 @@ export class Order {
   @Column({ type: 'int' })
   amountInr: number;
 
+  @Column({ type: 'int', default: 1 })
+  quantity: number;
+
   @Column({ type: 'varchar', length: 255 })
   businessNameSnapshot: string;
 
