@@ -15,11 +15,13 @@ import { LoginResponseDto } from '../auth/dto/auth-response.dto';
 import { LoginDto } from '../auth/dto/login.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { Location } from '../locations/entities/location.entity';
 import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqAssignQrCodeDto } from './dto/hq-assign-qr-code.dto';
+import { HqAttentionQueueParamDto } from './dto/hq-attention-queue-param.dto';
 import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
@@ -34,7 +36,8 @@ import { QrCode } from './entities/qr-code.entity';
 import { HqGuard } from './guards/hq.guard';
 import {
   HqService,
-  type HqAttentionResponse,
+  type HqAttentionCounts,
+  type HqAttentionItem,
   type HqQrBatchResult,
 } from './hq.service';
 
@@ -51,8 +54,17 @@ export class HqController {
 
   @UseGuards(HqGuard)
   @Get('attention')
-  async getAttention(): Promise<HqAttentionResponse> {
+  async getAttention(): Promise<HqAttentionCounts> {
     return this.hqService.getAttention();
+  }
+
+  @UseGuards(HqGuard)
+  @Get('attention/:queue')
+  async getAttentionQueue(
+    @Param() params: HqAttentionQueueParamDto,
+    @Query() query: PaginationDto,
+  ): Promise<PaginatedResponseDto<HqAttentionItem>> {
+    return this.hqService.getAttentionQueue(params.queue, query);
   }
 
   @UseGuards(HqGuard)
