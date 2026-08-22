@@ -26,6 +26,7 @@ import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
 import { HqQrCodesQueryDto } from './dto/hq-qr-codes-query.dto';
+import { HqUpdateLocationEasyMenuDto } from './dto/hq-update-location-easy-menu.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { HqUpdateUserDto } from './dto/hq-update-user.dto';
@@ -141,6 +142,15 @@ export class HqController {
     @Body() dto: HqUpdateLocationSlugDto,
   ): Promise<Location> {
     return this.hqService.updateLocationSlug(id, dto);
+  }
+
+  @UseGuards(HqGuard)
+  @Patch('locations/:id/easy-menu')
+  async updateLocationEasyMenu(
+    @Param('id') id: string,
+    @Body() dto: HqUpdateLocationEasyMenuDto,
+  ): Promise<Location> {
+    return this.hqService.updateLocationEasyMenu(id, dto);
   }
 
   @UseGuards(HqGuard)
