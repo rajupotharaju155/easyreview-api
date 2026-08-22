@@ -7,8 +7,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import {
+  PROFILE_COMPLETE_MESSAGE,
+  PROFILE_COMPLETENESS_TOTAL_STEPS,
+  PROFILE_KEYWORDS_INCOMPLETE_MESSAGE,
+  PROFILE_MIN_KEYWORDS,
+  PROFILE_MIN_QUESTIONS,
+  PROFILE_QUESTIONS_INCOMPLETE_MESSAGE,
+} from './constants/profile-completeness.constants';
 import { AiQuestionDto } from './dto/ai-question.dto';
 import { AiSettingsResponseDto } from './dto/ai-settings-response.dto';
+import { ProfileCompletenessResponseDto } from './dto/profile-completeness-response.dto';
 import { UpsertAiSettingsDto } from './dto/upsert-ai-settings.dto';
 import { AiQuestion, AiSettings } from './entities/ai-settings.entity';
 
@@ -38,6 +47,18 @@ export class AiSettingsService {
     });
 
     return this.toResponse(locationId, settings);
+  }
+
+  async getProfileCompleteness(
+    locationId: string,
+  ): Promise<ProfileCompletenessResponseDto> {
+    await this.assertLocationOwned(locationId);
+
+    const settings = await this.aiSettingsRepository.findOne({
+      where: { locationId },
+    });
+
+    return this.toCompletenessResponse(locationId, settings);
   }
 
   async upsertForOwnedLocation(
@@ -185,6 +206,49 @@ export class AiSettingsService {
     }
 
     return resolved;
+  }
+
+  private toCompletenessResponse(
+    locationId: string,
+    settings: AiSettings | null,
+  ): ProfileCompletenessResponseDto {
+    const keywordCount = (settings?.keywords ?? []).filter((keyword) =>
+      keyword.trim(),
+    ).length;
+    const questionCount = (settings?.questions ?? []).filter((item) =>
+      item.question?.trim(),
+    ).length;
+
+    const keywordsComplete = keywordCount >= PROFILE_MIN_KEYWORDS;
+    const questionsComplete = questionCount >= PROFILE_MIN_QUESTIONS;
+    const completedSteps = Number(keywordsComplete) + Number(questionsComplete);
+    const isComplete = completedSteps === PROFILE_COMPLETENESS_TOTAL_STEPS;
+
+    return new ProfileCompletenessResponseDto({
+      locationId,
+      completedSteps,
+      totalSteps: PROFILE_COMPLETENESS_TOTAL_STEPS,
+      isComplete,
+      message: isComplete ? PROFILE_COMPLETE_MESSAGE : '',
+      keywordCount,
+      questionCount,
+      steps: [
+        {
+          key: 'keywords',
+          complete: keywordsComplete,
+          message: keywordsComplete
+            ? null
+            : PROFILE_KEYWORDS_INCOMPLETE_MESSAGE,
+        },
+        {
+          key: 'questions',
+          complete: questionsComplete,
+          message: questionsComplete
+            ? null
+            : PROFILE_QUESTIONS_INCOMPLETE_MESSAGE,
+        },
+      ],
+    });
   }
 
   private toResponse(
