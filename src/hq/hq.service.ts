@@ -12,6 +12,7 @@ import { ILike, In, Not, Repository } from 'typeorm';
 import { LoginResponseDto } from '../auth/dto/auth-response.dto';
 import { LoginDto } from '../auth/dto/login.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { generateId } from '../common/utils/id';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { generateHqTokens } from '../common/utils/token.util';
@@ -44,10 +45,12 @@ import { TransferLocationDto } from './dto/transfer-location.dto';
 import { QrCode } from './entities/qr-code.entity';
 import { PublicQrCodeDto } from './dto/public-qr-code.dto';
 import {
+  ATTENTION_ENDING_SOON_DAYS,
   HQ_ADMINS,
   LOGIN_AS_TICKET_EXPIRATION,
   LOGIN_AS_TOKEN_TYPE,
   QR_BATCH_DEFAULT_SIZE,
+  type AttentionQueueKey,
 } from './hq.constants';
 import { generateQrCodeValue, ratingPageTargetUrl } from './qr-code.util';
 
@@ -57,8 +60,6 @@ export type HqQrBatchResult = {
   codes: QrCode[];
 };
 
-const ATTENTION_LIMIT = 8;
-const ENDING_SOON_DAYS = 14;
 const OPEN_ORDER_STATUSES = [
   OrderStatus.PLACED,
   OrderStatus.CONFIRMED,
@@ -66,54 +67,50 @@ const OPEN_ORDER_STATUSES = [
   OrderStatus.SHIPPED,
 ];
 
-export type HqAttentionQueue<T> = {
-  count: number;
-  items: T[];
+export type HqAttentionCounts = Record<AttentionQueueKey, number>;
+
+export type HqAttentionLocation = {
+  id: string;
+  name: string;
+  city: string | null;
+  userEmail: string | null;
+  createdAt: string;
 };
 
-export type HqAttentionResponse = {
-  locationsWithoutPlan: HqAttentionQueue<{
-    id: string;
-    name: string;
-    city: string | null;
-    userEmail: string | null;
-    createdAt: string;
-  }>;
-  subscriptionsEndingSoon: HqAttentionQueue<{
-    id: string;
-    locationId: string;
-    locationName: string | null;
-    planName: string | null;
-    startDate: string | null;
-    endDate: string | null;
-  }>;
-  subscriptionsOverdue: HqAttentionQueue<{
-    id: string;
-    locationId: string;
-    locationName: string | null;
-    planName: string | null;
-    startDate: string | null;
-    endDate: string | null;
-  }>;
-  pendingPayments: HqAttentionQueue<{
-    id: string;
-    kind: string;
-    amount: number;
-    currency: string;
-    provider: string | null;
-    locationId: string;
-    locationName: string | null;
-    orderId: string | null;
-    createdAt: Date;
-  }>;
-  openOrders: HqAttentionQueue<{
-    id: string;
-    businessNameSnapshot: string;
-    status: OrderStatus;
-    locationId: string;
-    createdAt: Date;
-  }>;
+export type HqAttentionSubscription = {
+  id: string;
+  locationId: string;
+  locationName: string | null;
+  planName: string | null;
+  startDate: string | null;
+  endDate: string | null;
 };
+
+export type HqAttentionPayment = {
+  id: string;
+  kind: string;
+  amount: number;
+  currency: string;
+  provider: string | null;
+  locationId: string;
+  locationName: string | null;
+  orderId: string | null;
+  createdAt: string;
+};
+
+export type HqAttentionOrder = {
+  id: string;
+  businessNameSnapshot: string;
+  status: OrderStatus;
+  locationId: string;
+  createdAt: string;
+};
+
+export type HqAttentionItem =
+  | HqAttentionLocation
+  | HqAttentionSubscription
+  | HqAttentionPayment
+  | HqAttentionOrder;
 
 @Injectable()
 export class HqService {
@@ -152,14 +149,138 @@ export class HqService {
   }
 
   /**
-   * Home queues: locations without live access, subscriptions ending
+   * Home tab counts: locations without live access, subscriptions ending
    * soon or overdue, pending payments, and open orders.
    */
-  async getAttention(): Promise<HqAttentionResponse> {
-    const today = todayIst();
-    const endingSoonUntil = addDaysToIsoDate(today, ENDING_SOON_DAYS);
+  async getAttention(): Promise<HqAttentionCounts> {
+    const { today, endingSoonUntil } = this.getAttentionDates();
+    const [
+      locationsWithoutPlan,
+      subscriptionsEndingSoon,
+      subscriptionsOverdue,
+      pendingPayments,
+      openOrders,
+    ] = await Promise.all([
+      this.locationsWithoutPlanQb(today).getCount(),
+      this.endingSoonQb(today, endingSoonUntil).getCount(),
+      this.overdueQb(today).getCount(),
+      this.pendingPaymentsQb().getCount(),
+      this.orderRepository.count({
+        where: { status: In(OPEN_ORDER_STATUSES) },
+      }),
+    ]);
 
-    const locationsWithoutPlanQb = this.locationRepository
+    return {
+      locationsWithoutPlan,
+      subscriptionsEndingSoon,
+      subscriptionsOverdue,
+      pendingPayments,
+      openOrders,
+    };
+  }
+
+  /**
+   * Paginated rows for a single home attention queue.
+   */
+  async getAttentionQueue(
+    queue: AttentionQueueKey,
+    query: PaginationDto,
+  ): Promise<PaginatedResponseDto<HqAttentionItem>> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const { today, endingSoonUntil } = this.getAttentionDates();
+
+    if (queue === 'locationsWithoutPlan') {
+      const qb = this.locationsWithoutPlanQb(today);
+      const [locations, total] = await Promise.all([
+        qb
+          .clone()
+          .leftJoinAndSelect('location.user', 'user')
+          .orderBy('location.createdAt', 'DESC')
+          .skip(skip)
+          .take(limit)
+          .getMany(),
+        qb.clone().getCount(),
+      ]);
+      return new PaginatedResponseDto(
+        locations.map((location) => this.toAttentionLocation(location)),
+        total,
+        page,
+        limit,
+      );
+    }
+
+    if (queue === 'subscriptionsEndingSoon') {
+      const qb = this.endingSoonQb(today, endingSoonUntil);
+      const [subscriptions, total] = await Promise.all([
+        qb.clone().skip(skip).take(limit).getMany(),
+        qb.clone().getCount(),
+      ]);
+      return new PaginatedResponseDto(
+        subscriptions.map((subscription) =>
+          this.toAttentionSubscription(subscription),
+        ),
+        total,
+        page,
+        limit,
+      );
+    }
+
+    if (queue === 'subscriptionsOverdue') {
+      const qb = this.overdueQb(today);
+      const [subscriptions, total] = await Promise.all([
+        qb.clone().skip(skip).take(limit).getMany(),
+        qb.clone().getCount(),
+      ]);
+      return new PaginatedResponseDto(
+        subscriptions.map((subscription) =>
+          this.toAttentionSubscription(subscription),
+        ),
+        total,
+        page,
+        limit,
+      );
+    }
+
+    if (queue === 'pendingPayments') {
+      const qb = this.pendingPaymentsQb();
+      const [payments, total] = await Promise.all([
+        qb.clone().skip(skip).take(limit).getMany(),
+        qb.clone().getCount(),
+      ]);
+      return new PaginatedResponseDto(
+        payments.map((payment) => this.toAttentionPayment(payment)),
+        total,
+        page,
+        limit,
+      );
+    }
+    // open orders
+    const [orders, total] = await this.orderRepository.findAndCount({
+      where: { status: In(OPEN_ORDER_STATUSES) },
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+    return new PaginatedResponseDto(
+      orders.map((order) => this.toAttentionOrder(order)),
+      total,
+      page,
+      limit,
+    );
+  }
+
+  private getAttentionDates() {
+    const today = todayIst();
+    return {
+      today,
+      endingSoonUntil: addDaysToIsoDate(today, ATTENTION_ENDING_SOON_DAYS),
+    };
+  }
+
+  private locationsWithoutPlanQb(today: string) {
+    return this.locationRepository
       .createQueryBuilder('location')
       .leftJoin(
         Subscription,
@@ -168,14 +289,18 @@ export class HqService {
         { activeStatus: SubscriptionStatus.ACTIVE, today },
       )
       .where('activeSub.id IS NULL');
+  }
 
-    const pendingPaymentsQb = this.paymentRepository
+  private pendingPaymentsQb() {
+    return this.paymentRepository
       .createQueryBuilder('payment')
       .innerJoinAndSelect('payment.location', 'location')
       .where('payment.status = :status', { status: PaymentStatus.PENDING })
       .orderBy('payment.createdAt', 'DESC');
+  }
 
-    const endingSoonQb = this.subscriptionRepository
+  private endingSoonQb(today: string, until: string) {
+    return this.subscriptionRepository
       .createQueryBuilder('subscription')
       .innerJoinAndSelect('subscription.plan', 'plan')
       .innerJoinAndSelect('subscription.location', 'location')
@@ -183,10 +308,12 @@ export class HqService {
         status: SubscriptionStatus.ACTIVE,
       })
       .andWhere('subscription.endDate >= :today', { today })
-      .andWhere('subscription.endDate <= :until', { until: endingSoonUntil })
+      .andWhere('subscription.endDate <= :until', { until })
       .orderBy('subscription.endDate', 'ASC');
+  }
 
-    const overdueQb = this.subscriptionRepository
+  private overdueQb(today: string) {
+    return this.subscriptionRepository
       .createQueryBuilder('subscription')
       .innerJoinAndSelect('subscription.plan', 'plan')
       .innerJoinAndSelect('subscription.location', 'location')
@@ -205,96 +332,25 @@ export class HqService {
         ],
       })
       .orderBy('subscription.endDate', 'DESC');
+  }
 
-    const [
-      locationsWithoutPlanCount,
-      locationsWithoutPlan,
-      pendingPaymentsCount,
-      pendingPayments,
-      openOrdersCount,
-      openOrders,
-      subscriptionsEndingSoonCount,
-      subscriptionsEndingSoon,
-      subscriptionsOverdueCount,
-      subscriptionsOverdue,
-    ] = await Promise.all([
-      locationsWithoutPlanQb.clone().getCount(),
-      locationsWithoutPlanQb
-        .clone()
-        .leftJoinAndSelect('location.user', 'user')
-        .orderBy('location.createdAt', 'DESC')
-        .take(ATTENTION_LIMIT)
-        .getMany(),
-      pendingPaymentsQb.clone().getCount(),
-      pendingPaymentsQb.clone().take(ATTENTION_LIMIT).getMany(),
-      this.orderRepository.count({
-        where: { status: In(OPEN_ORDER_STATUSES) },
-      }),
-      this.orderRepository.find({
-        where: { status: In(OPEN_ORDER_STATUSES) },
-        order: { createdAt: 'DESC' },
-        take: ATTENTION_LIMIT,
-      }),
-      endingSoonQb.clone().getCount(),
-      endingSoonQb.clone().take(ATTENTION_LIMIT).getMany(),
-      overdueQb.clone().getCount(),
-      overdueQb.clone().take(ATTENTION_LIMIT).getMany(),
-    ]);
+  private toIso(value: Date | string): string {
+    return value instanceof Date ? value.toISOString() : String(value);
+  }
 
+  private toAttentionLocation(location: Location): HqAttentionLocation {
     return {
-      locationsWithoutPlan: {
-        count: locationsWithoutPlanCount,
-        items: locationsWithoutPlan.map((location) => ({
-          id: location.id,
-          name: location.name,
-          city: location.city,
-          userEmail: location.user?.email ?? null,
-          createdAt:
-            location.createdAt instanceof Date
-              ? location.createdAt.toISOString()
-              : String(location.createdAt),
-        })),
-      },
-      subscriptionsEndingSoon: {
-        count: subscriptionsEndingSoonCount,
-        items: subscriptionsEndingSoon.map((subscription) =>
-          this.toAttentionSubscription(subscription),
-        ),
-      },
-      subscriptionsOverdue: {
-        count: subscriptionsOverdueCount,
-        items: subscriptionsOverdue.map((subscription) =>
-          this.toAttentionSubscription(subscription),
-        ),
-      },
-      pendingPayments: {
-        count: pendingPaymentsCount,
-        items: pendingPayments.map((payment) => ({
-          id: payment.id,
-          kind: payment.kind,
-          amount: payment.amount,
-          currency: payment.currency,
-          provider: payment.provider,
-          locationId: payment.locationId,
-          locationName: payment.location?.name ?? null,
-          orderId: payment.orderId,
-          createdAt: payment.createdAt,
-        })),
-      },
-      openOrders: {
-        count: openOrdersCount,
-        items: openOrders.map((order) => ({
-          id: order.id,
-          businessNameSnapshot: order.businessNameSnapshot,
-          status: order.status,
-          locationId: order.locationId,
-          createdAt: order.createdAt,
-        })),
-      },
+      id: location.id,
+      name: location.name,
+      city: location.city,
+      userEmail: location.user?.email ?? null,
+      createdAt: this.toIso(location.createdAt),
     };
   }
 
-  private toAttentionSubscription(subscription: Subscription) {
+  private toAttentionSubscription(
+    subscription: Subscription,
+  ): HqAttentionSubscription {
     return {
       id: subscription.id,
       locationId: subscription.locationId,
@@ -302,6 +358,30 @@ export class HqService {
       planName: subscription.plan?.name ?? null,
       startDate: subscription.startDate,
       endDate: subscription.endDate,
+    };
+  }
+
+  private toAttentionPayment(payment: Payment): HqAttentionPayment {
+    return {
+      id: payment.id,
+      kind: payment.kind,
+      amount: payment.amount,
+      currency: payment.currency,
+      provider: payment.provider,
+      locationId: payment.locationId,
+      locationName: payment.location?.name ?? null,
+      orderId: payment.orderId,
+      createdAt: this.toIso(payment.createdAt),
+    };
+  }
+
+  private toAttentionOrder(order: Order): HqAttentionOrder {
+    return {
+      id: order.id,
+      businessNameSnapshot: order.businessNameSnapshot,
+      status: order.status,
+      locationId: order.locationId,
+      createdAt: this.toIso(order.createdAt),
     };
   }
 

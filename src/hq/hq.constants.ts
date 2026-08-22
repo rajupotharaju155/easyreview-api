@@ -20,6 +20,20 @@ export const PUBLIC_SITE_BASE_URL = 'https://easyreview.co.in';
 /** Default batch size when HQ generates claimable QR codes. */
 export const QR_BATCH_DEFAULT_SIZE = 10;
 
+/** HQ home “needs attention” queues. */
+export const ATTENTION_QUEUE_KEYS = [
+  'locationsWithoutPlan',
+  'subscriptionsEndingSoon',
+  'subscriptionsOverdue',
+  'pendingPayments',
+  'openOrders',
+] as const;
+
+export type AttentionQueueKey = (typeof ATTENTION_QUEUE_KEYS)[number];
+
+/** Active subscriptions ending within this many days (inclusive). */
+export const ATTENTION_ENDING_SOON_DAYS = 14;
+
 /**
  * Ambiguous chars excluded (0/O, 1/I/L) so standee labels stay easy to type.
  * Length balances guessability vs scan URL size.
