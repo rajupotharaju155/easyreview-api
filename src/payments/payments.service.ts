@@ -184,8 +184,16 @@ export class PaymentsService {
       utr?: string;
       notes?: string | null;
       status?: PaymentStatus;
+      discountAmount?: number;
     } = {},
   ): Promise<Payment> {
+    const discountAmount = extras.discountAmount ?? 0;
+    if (discountAmount > plan.amount) {
+      throw new BadRequestException(
+        'discountAmount cannot be greater than the plan amount',
+      );
+    }
+    const chargedAmount = plan.amount - discountAmount;
     const isComplimentary = plan.amount === 0;
     const provider =
       extras.provider !== undefined
@@ -204,7 +212,8 @@ export class PaymentsService {
       planId: plan.id,
       locationId: subscription.locationId,
       userId: subscription.userId,
-      amount: plan.amount,
+      amount: chargedAmount,
+      discountAmount,
       currency: plan.currency,
       status,
       provider,
@@ -247,6 +256,7 @@ export class PaymentsService {
       locationId: order.locationId,
       userId: order.userId,
       amount: order.amountInr,
+      discountAmount: 0,
       currency: 'INR',
       status,
       provider,
@@ -274,8 +284,14 @@ export class PaymentsService {
     if (dto.gatewayPaymentId !== undefined) {
       payment.gatewayPaymentId = dto.gatewayPaymentId;
     }
+    if (dto.discountAmount !== undefined) {
+      this.applyDiscount(payment, dto.discountAmount);
+    }
 
-    if (dto.status === PaymentStatus.SUCCESS) {
+    if (
+      dto.status === PaymentStatus.SUCCESS &&
+      payment.status !== PaymentStatus.SUCCESS
+    ) {
       return this.markSuccess(payment, { utr: dto.utr ?? undefined });
     }
 
@@ -337,6 +353,27 @@ export class PaymentsService {
     }
 
     return this.findOneForHq(payment.id);
+  }
+
+  private applyDiscount(payment: Payment, discountAmount: number): void {
+    if (payment.kind !== PaymentKind.SUBSCRIPTION) {
+      throw new BadRequestException(
+        'Discounts can only be applied to subscription payments',
+      );
+    }
+    const listAmount = payment.plan?.amount;
+    if (listAmount == null) {
+      throw new BadRequestException(
+        'This payment has no plan to calculate a discount against',
+      );
+    }
+    if (discountAmount > listAmount) {
+      throw new BadRequestException(
+        'discountAmount cannot be greater than the plan amount',
+      );
+    }
+    payment.discountAmount = discountAmount;
+    payment.amount = listAmount - discountAmount;
   }
 
   private async confirmOrderIfPlaced(orderId: string): Promise<void> {

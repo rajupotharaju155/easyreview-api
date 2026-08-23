@@ -83,6 +83,9 @@ export class Payment {
   @Column({ type: 'int' })
   amount: number;
 
+  @Column({ type: 'int', default: 0 })
+  discountAmount: number;
+
   @Column({ type: 'varchar', length: 3, default: 'INR' })
   currency: string;
 
