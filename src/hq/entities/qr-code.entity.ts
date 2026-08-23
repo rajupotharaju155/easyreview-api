@@ -41,6 +41,10 @@ export class QrCode {
   @Column({ type: 'text', nullable: true })
   targetUrl: string | null;
 
+  /** True when assigned as a Menu QR; false for Review; null when unassigned. */
+  @Column({ type: 'boolean', nullable: true })
+  isMenuQr: boolean | null;
+
   @Column({ type: 'timestamptz', nullable: true })
   assignedAt: Date | null;
 

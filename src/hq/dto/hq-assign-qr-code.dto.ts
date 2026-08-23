@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class HqAssignQrCodeDto {
   @IsString()
@@ -10,4 +10,8 @@ export class HqAssignQrCodeDto {
   @IsNotEmpty()
   @MinLength(1)
   locationId: string;
+
+  /** When true, the QR redirects to the public menu page instead of the rating page. */
+  @IsBoolean()
+  isMenuQr: boolean;
 }
