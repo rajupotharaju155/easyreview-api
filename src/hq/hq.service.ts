@@ -549,7 +549,7 @@ export class HqService {
   }
 
   /**
-   * Transfers a location to a different agency user.
+   * Transfers a location and its subscriptions to a different agency user.
    */
   async transferLocation(
     locationId: string,
@@ -580,8 +580,17 @@ export class HqService {
         'Selected user already has a location with this Google Place ID',
       );
     }
-    location.userId = targetUserId;
-    return this.locationRepository.save(location);
+
+    return this.locationRepository.manager.transaction(async (manager) => {
+      location.userId = targetUserId;
+      const saved = await manager.save(location);
+      await manager.update(
+        Subscription,
+        { locationId },
+        { userId: targetUserId },
+      );
+      return saved;
+    });
   }
 
   /**
