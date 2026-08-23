@@ -15,3 +15,8 @@ export function generateQrCodeValue(): string {
 export function ratingPageTargetUrl(slug: string): string {
   return `${PUBLIC_SITE_BASE_URL}/rate/${encodeURIComponent(slug.trim())}`;
 }
+
+/** Canonical public menu URL encoded into assigned Menu QR redirects. */
+export function menuPageTargetUrl(slug: string): string {
+  return `${PUBLIC_SITE_BASE_URL}/menu/${encodeURIComponent(slug.trim())}`;
+}

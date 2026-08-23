@@ -53,7 +53,11 @@ import {
   QR_BATCH_DEFAULT_SIZE,
   type AttentionQueueKey,
 } from './hq.constants';
-import { generateQrCodeValue, ratingPageTargetUrl } from './qr-code.util';
+import {
+  generateQrCodeValue,
+  menuPageTargetUrl,
+  ratingPageTargetUrl,
+} from './qr-code.util';
 
 export type HqQrBatchResult = {
   batchId: string;
@@ -665,6 +669,7 @@ export class HqService {
           batchId,
           locationId: null,
           targetUrl: null,
+          isMenuQr: null,
           assignedAt: null,
         }),
       );
@@ -704,12 +709,16 @@ export class HqService {
     const location = await this.findLocationById(dto.locationId.trim());
     if (!location.slug?.trim()) {
       throw new BadRequestException(
-        `Location "${location.id}" has no slug; cannot build rating target URL`,
+        `Location "${location.id}" has no slug; cannot build target URL`,
       );
     }
 
+    const isMenuQr = dto.isMenuQr === true;
     qr.locationId = location.id;
-    qr.targetUrl = ratingPageTargetUrl(location.slug);
+    qr.isMenuQr = isMenuQr;
+    qr.targetUrl = isMenuQr
+      ? menuPageTargetUrl(location.slug)
+      : ratingPageTargetUrl(location.slug);
     qr.assignedAt = new Date();
     await this.qrCodeRepository.save(qr);
 
@@ -737,6 +746,7 @@ export class HqService {
 
     qr.locationId = null;
     qr.targetUrl = null;
+    qr.isMenuQr = null;
     qr.assignedAt = null;
     return this.qrCodeRepository.save(qr);
   }
@@ -765,12 +775,26 @@ export class HqService {
   async findQrCodes(
     query: HqQrCodesQueryDto,
   ): Promise<PaginatedResponseDto<QrCode>> {
-    const { page = 1, limit = 20, search, batchId, locationId, assigned } =
-      query;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      batchId,
+      locationId,
+      assigned,
+      isMenuQr,
+    } = query;
     const skip = (page - 1) * limit;
     const qb = this.qrCodeRepository
       .createQueryBuilder('qr')
-      .select(['qr.id', 'qr.code', 'qr.batchId', 'qr.locationId', 'qr.createdAt'])
+      .select([
+        'qr.id',
+        'qr.code',
+        'qr.batchId',
+        'qr.locationId',
+        'qr.isMenuQr',
+        'qr.createdAt',
+      ])
       .leftJoin('qr.location', 'location')
       .addSelect(['location.id', 'location.name', 'location.slug'])
       .orderBy('qr.createdAt', 'DESC')
@@ -792,6 +816,11 @@ export class HqService {
       });
     } else if (assigned === true) {
       qb.andWhere('qr.locationId IS NOT NULL');
+      if (isMenuQr === true) {
+        qb.andWhere('qr.isMenuQr = true');
+      } else if (isMenuQr === false) {
+        qb.andWhere('(qr.isMenuQr = false OR qr.isMenuQr IS NULL)');
+      }
     } else if (assigned === false) {
       qb.andWhere('qr.locationId IS NULL');
     }
@@ -802,6 +831,7 @@ export class HqService {
       code: qr.code,
       batchId: qr.batchId,
       locationId: qr.locationId,
+      isMenuQr: qr.isMenuQr,
       location: qr.location
         ? {
             id: qr.location.id,

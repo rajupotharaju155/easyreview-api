@@ -49,4 +49,10 @@ export class HqQrCodesQueryDto {
   @Transform(toOptionalBoolean)
   @IsBoolean()
   assigned?: boolean;
+
+  /** When listing assigned codes, true = Menu QRs; false = Review QRs. */
+  @IsOptional()
+  @Transform(toOptionalBoolean)
+  @IsBoolean()
+  isMenuQr?: boolean;
 }
