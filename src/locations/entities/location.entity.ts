@@ -37,6 +37,9 @@ export class Location {
   @Column({ type: 'varchar', length: 255, nullable: true })
   slug: string | null;
 
+  @Column({ type: 'boolean', default: false })
+  isEasyMenuEnabled: boolean;
+
   @Index()
   @Column({ type: 'varchar', length: 255 })
   placeId: string;

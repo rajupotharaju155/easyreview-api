@@ -1,5 +1,6 @@
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
 import { LoggerService } from './common/services/logger.service';
@@ -10,12 +11,16 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
+    bodyParser: false,
   });
 
   const logger = app.get(LoggerService);
   logger.setContext('Bootstrap');
 
   app.useLogger(logger);
+
+  app.use(json({ limit: '8mb' }));
+  app.use(urlencoded({ extended: true, limit: '8mb' }));
 
   app.useGlobalPipes(
     new ValidationPipe({
