@@ -36,6 +36,7 @@ import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
 import { HqQrCodesQueryDto } from './dto/hq-qr-codes-query.dto';
+import { HqUpdateLocationEasyMenuDto } from './dto/hq-update-location-easy-menu.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { HqUpdateUserDto } from './dto/hq-update-user.dto';
@@ -531,6 +532,15 @@ export class HqService {
       throw new ConflictException(`Slug "${slug}" is already in use`);
     }
     location.slug = slug;
+    return this.locationRepository.save(location);
+  }
+
+  async updateLocationEasyMenu(
+    id: string,
+    dto: HqUpdateLocationEasyMenuDto,
+  ): Promise<Location> {
+    const location = await this.findLocationById(id);
+    location.isEasyMenuEnabled = dto.isEasyMenuEnabled;
     return this.locationRepository.save(location);
   }
 

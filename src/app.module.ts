@@ -17,6 +17,7 @@ import { HealthModule } from './health/health.module';
 import { HqModule } from './hq/hq.module';
 import { InternalJobsModule } from './internal-jobs/internal-jobs.module';
 import { LocationsModule } from './locations/locations.module';
+import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './orders/orders.module';
 import { PlansModule } from './plans/plans.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -71,6 +72,7 @@ const ignoreEnvFile =
     InternalJobsModule,
     UsersModule,
     LocationsModule,
+    MenuModule,
     AiSettingsModule,
     OrdersModule,
     PlansModule,

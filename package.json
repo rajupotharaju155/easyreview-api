@@ -36,10 +36,13 @@
     "gcp:bootstrap:production": "bash scripts/bootstrap-gcp.sh production",
     "gcp:scheduler:staging": "bash scripts/setup-scheduler.sh staging",
     "gcp:scheduler:production": "bash scripts/setup-scheduler.sh production",
+    "gcp:menu-bucket:staging": "bash scripts/setup-menu-bucket.sh staging",
+    "gcp:menu-bucket:production": "bash scripts/setup-menu-bucket.sh production",
     "deploy:staging": "bash scripts/deploy-cloud-run.sh staging",
     "deploy:production": "bash scripts/deploy-cloud-run.sh production"
   },
   "dependencies": {
+    "@google-cloud/storage": "^8.0.1",
     "@google/genai": "^2.17.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -71,6 +74,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
