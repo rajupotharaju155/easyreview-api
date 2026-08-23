@@ -1,5 +1,13 @@
-import { Transform } from 'class-transformer';
-import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { PaymentProvider } from '../../payments/enums/payment-provider.enum';
 import { PaymentStatus } from '../../payments/enums/payment-status.enum';
 import { CreateSubscriptionDto } from './create-subscription.dto';
@@ -28,4 +36,10 @@ export class HqCreateSubscriptionDto extends CreateSubscriptionDto {
   @IsOptional()
   @IsIn([PaymentStatus.PENDING, PaymentStatus.SUCCESS])
   paymentStatus?: PaymentStatus.PENDING | PaymentStatus.SUCCESS;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  discountAmount?: number;
 }

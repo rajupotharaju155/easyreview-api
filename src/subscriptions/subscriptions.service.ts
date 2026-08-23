@@ -180,6 +180,7 @@ export class SubscriptionsService {
         utr: dto.utr,
         notes: dto.paymentNotes,
         status: dto.paymentStatus ?? PaymentStatus.SUCCESS,
+        discountAmount: dto.discountAmount,
       },
     });
   }
@@ -230,6 +231,7 @@ export class SubscriptionsService {
       utr?: string;
       notes?: string | null;
       status?: PaymentStatus;
+      discountAmount?: number;
     };
   }): Promise<Subscription> {
     if (!input.plan.isActive) {
@@ -270,6 +272,7 @@ export class SubscriptionsService {
         utr: input.payment?.utr,
         notes: input.payment?.notes ?? input.notes,
         status: paymentStatus,
+        discountAmount: input.payment?.discountAmount,
       });
       return this.findOneById(saved.id);
     } catch (error) {
