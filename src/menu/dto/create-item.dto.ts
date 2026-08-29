@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsNumber,
   IsOptional,
@@ -8,7 +10,10 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { MAX_PRICE_VARIANTS } from '../menu-pricing';
+import { ItemVariantPriceDto } from './price-variant.dto';
 
 function emptyToUndefined({ value }: { value: unknown }): unknown {
   if (typeof value !== 'string') return value;
@@ -64,8 +69,20 @@ export class CreateItemDto {
   @Min(0)
   halfPrice?: number | null;
 
+  @IsOptional()
+  @IsBoolean()
+  isMultiPriced?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PRICE_VARIANTS)
+  @ValidateNested({ each: true })
+  @Type(() => ItemVariantPriceDto)
+  variantPrices?: ItemVariantPriceDto[];
+
+  @ValidateIf((dto: CreateItemDto) => dto.isMultiPriced !== true)
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  fullPrice: number;
+  fullPrice?: number;
 }

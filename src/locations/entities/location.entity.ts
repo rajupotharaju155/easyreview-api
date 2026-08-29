@@ -12,6 +12,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
+import { MenuStyle } from '../../menu/enums/menu-style.enum';
 import { User } from '../../users/entities/user.entity';
 import { LocationMetric } from './location-metric.entity';
 import { LocationScanMetric } from './location-scan-metric.entity';
@@ -39,6 +40,13 @@ export class Location {
 
   @Column({ type: 'boolean', default: false })
   isEasyMenuEnabled: boolean;
+
+  @Column({
+    type: 'varchar',
+    length: 32,
+    default: MenuStyle.RESTAURANT_STYLE,
+  })
+  menuStyle: MenuStyle;
 
   @Column({ type: 'boolean', default: false })
   isEasyStoryEnabled: boolean;

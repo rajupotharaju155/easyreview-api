@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { Location } from '../../locations/entities/location.entity';
+import type { MenuItemVariantPrice } from '../menu-pricing';
 import { MenuCategory } from './menu-category.entity';
 
 @Entity('menu_items')
@@ -64,6 +65,13 @@ export class MenuItem {
 
   @Column({ type: 'double precision' })
   fullPrice: number;
+
+  @Column({ type: 'boolean', default: false })
+  isMultiPriced: boolean;
+
+  /** Prices keyed by category priceVariants[].id. Empty cells are omitted. */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  variantPrices: MenuItemVariantPrice[];
 
   @Column({ type: 'int', default: 0 })
   sortOrder: number;

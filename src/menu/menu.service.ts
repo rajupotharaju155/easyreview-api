@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import { MenuStyle } from './enums/menu-style.enum';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { CreateComboDto } from './dto/create-combo.dto';
 import { CreateItemDto } from './dto/create-item.dto';
@@ -24,6 +25,17 @@ import { MenuCombo } from './entities/menu-combo.entity';
 import { MenuItem } from './entities/menu-item.entity';
 import { MenuSpecial } from './entities/menu-special.entity';
 import { MenuStorageService, type MenuImageFile } from './menu-storage.service';
+import {
+  coercePriceVariants,
+  coerceVariantPrices,
+  dropRemovedVariantPrices,
+  minVariantPrice,
+  normalizePriceVariants,
+  normalizeVariantPrices,
+  remapVariantPrices,
+  type MenuItemVariantPrice,
+  type MenuPriceVariant,
+} from './menu-pricing';
 
 const MAX_IMAGE_URL_LENGTH = 2048;
 
@@ -39,6 +51,8 @@ export type MenuItemDto = {
   isHalfServed: boolean;
   halfPrice: number | null;
   fullPrice: number;
+  isMultiPriced: boolean;
+  variantPrices: MenuItemVariantPrice[];
   sortOrder: number;
 };
 
@@ -47,6 +61,7 @@ export type MenuCategoryDto = {
   locationId: string;
   name: string;
   sortOrder: number;
+  priceVariants: MenuPriceVariant[];
   items: MenuItemDto[];
 };
 
@@ -80,6 +95,7 @@ export type LocationMenuDto = {
     state: string | null;
     phoneNumber: string | null;
     formattedAddress: string | null;
+    menuStyle: MenuStyle;
   };
   categories: MenuCategoryDto[];
   combos: MenuComboDto[];
@@ -123,6 +139,7 @@ export class MenuService {
         'phoneNumber',
         'formattedAddress',
         'isEasyMenuEnabled',
+        'menuStyle',
       ],
     });
 
@@ -147,6 +164,7 @@ export class MenuService {
         locationId,
         name: dto.name.trim(),
         sortOrder,
+        priceVariants: normalizePriceVariants(dto.priceVariants ?? []),
       }),
     );
     return { ...this.toCategoryDto(category), items: [] };
@@ -161,6 +179,27 @@ export class MenuService {
     const category = await this.requireCategory(locationId, categoryId);
     if (dto.name !== undefined) {
       category.name = dto.name.trim();
+    }
+    if (dto.priceVariants !== undefined) {
+      const nextVariants = normalizePriceVariants(dto.priceVariants);
+      category.priceVariants = nextVariants;
+      const categoryItems = await this.itemRepository.find({
+        where: { locationId, categoryId },
+      });
+      for (const item of categoryItems) {
+        const nextPrices = dropRemovedVariantPrices(
+          coerceVariantPrices(item.variantPrices),
+          nextVariants,
+        );
+        item.variantPrices = nextPrices;
+        if (item.isMultiPriced) {
+          const min = minVariantPrice(nextPrices);
+          if (min != null) item.fullPrice = min;
+        }
+      }
+      if (categoryItems.length > 0) {
+        await this.itemRepository.save(categoryItems);
+      }
     }
     await this.categoryRepository.save(category);
     const items = await this.itemRepository.find({
@@ -217,12 +256,19 @@ export class MenuService {
     dto: CreateItemDto,
   ): Promise<MenuItemDto> {
     await this.assertLocationOwned(locationId);
-    await this.requireCategory(locationId, dto.categoryId);
-    this.assertItemPricing(dto.isHalfServed ?? false, dto.halfPrice);
+    const category = await this.requireCategory(locationId, dto.categoryId);
     this.assertImageUrl(dto.imageUrl);
 
+    const pricing = this.resolveItemPricing({
+      isMultiPriced: Boolean(dto.isMultiPriced),
+      variantPrices: dto.variantPrices,
+      isHalfServed: Boolean(dto.isHalfServed),
+      halfPrice: dto.halfPrice,
+      fullPrice: dto.fullPrice,
+      variants: coercePriceVariants(category.priceVariants),
+    });
+
     const sortOrder = await this.nextItemSortOrder(locationId, dto.categoryId);
-    const isHalfServed = Boolean(dto.isHalfServed);
     const item = await this.itemRepository.save(
       new MenuItem({
         locationId,
@@ -232,9 +278,11 @@ export class MenuService {
         isNonVeg: Boolean(dto.isNonVeg),
         isNotAvailable: Boolean(dto.isNotAvailable),
         imageUrl: dto.imageUrl?.trim() || null,
-        isHalfServed,
-        halfPrice: isHalfServed ? (dto.halfPrice ?? null) : null,
-        fullPrice: dto.fullPrice,
+        isHalfServed: pricing.isHalfServed,
+        halfPrice: pricing.halfPrice,
+        fullPrice: pricing.fullPrice,
+        isMultiPriced: pricing.isMultiPriced,
+        variantPrices: pricing.variantPrices,
         sortOrder,
       }),
     );
@@ -248,6 +296,11 @@ export class MenuService {
   ): Promise<MenuItemDto> {
     await this.assertLocationOwned(locationId);
     const item = await this.requireItem(locationId, itemId);
+    const previousCategoryId = item.categoryId;
+    const previousCategory =
+      dto.categoryId && dto.categoryId !== item.categoryId
+        ? await this.requireCategory(locationId, item.categoryId)
+        : null;
 
     if (dto.categoryId && dto.categoryId !== item.categoryId) {
       await this.requireCategory(locationId, dto.categoryId);
@@ -265,14 +318,40 @@ export class MenuService {
       this.assertImageUrl(dto.imageUrl);
       item.imageUrl = dto.imageUrl?.trim() || null;
     }
-    if (dto.fullPrice !== undefined) item.fullPrice = dto.fullPrice;
-    if (dto.isHalfServed !== undefined) item.isHalfServed = dto.isHalfServed;
-    if (dto.halfPrice !== undefined) item.halfPrice = dto.halfPrice;
 
-    if (!item.isHalfServed) {
-      item.halfPrice = null;
+    const category = await this.requireCategory(locationId, item.categoryId);
+    const targetVariants = coercePriceVariants(category.priceVariants);
+    let variantPrices = coerceVariantPrices(item.variantPrices);
+    if (dto.variantPrices !== undefined) {
+      variantPrices = dto.variantPrices;
+    } else if (previousCategory && item.categoryId !== previousCategoryId) {
+      variantPrices = remapVariantPrices(
+        variantPrices,
+        coercePriceVariants(previousCategory.priceVariants),
+        targetVariants,
+      );
     }
-    this.assertItemPricing(item.isHalfServed, item.halfPrice);
+
+    const wantsMultiPrice = dto.isMultiPriced ?? item.isMultiPriced;
+    const remappedEmpty =
+      wantsMultiPrice &&
+      dto.variantPrices === undefined &&
+      previousCategory != null &&
+      normalizeVariantPrices(variantPrices, targetVariants).length === 0;
+
+    const pricing = this.resolveItemPricing({
+      isMultiPriced: remappedEmpty ? false : wantsMultiPrice,
+      variantPrices,
+      isHalfServed: dto.isHalfServed ?? item.isHalfServed,
+      halfPrice: dto.halfPrice !== undefined ? dto.halfPrice : item.halfPrice,
+      fullPrice: dto.fullPrice !== undefined ? dto.fullPrice : item.fullPrice,
+      variants: targetVariants,
+    });
+    item.isHalfServed = pricing.isHalfServed;
+    item.halfPrice = pricing.halfPrice;
+    item.fullPrice = pricing.fullPrice;
+    item.isMultiPriced = pricing.isMultiPriced;
+    item.variantPrices = pricing.variantPrices;
 
     await this.itemRepository.save(item);
     if (
@@ -514,6 +593,7 @@ export class MenuService {
         state: location.state,
         phoneNumber: location.phoneNumber ?? null,
         formattedAddress: location.formattedAddress ?? null,
+        menuStyle: location.menuStyle ?? MenuStyle.RESTAURANT_STYLE,
       },
       categories: categories.map((category) => ({
         ...this.toCategoryDto(category),
@@ -558,6 +638,8 @@ export class MenuService {
       isHalfServed: item.isHalfServed,
       halfPrice: item.halfPrice,
       fullPrice: item.fullPrice,
+      isMultiPriced: Boolean(item.isMultiPriced),
+      variantPrices: coerceVariantPrices(item.variantPrices),
       sortOrder: item.sortOrder,
     };
   }
@@ -568,6 +650,7 @@ export class MenuService {
       locationId: category.locationId,
       name: category.name,
       sortOrder: category.sortOrder,
+      priceVariants: coercePriceVariants(category.priceVariants),
     };
   }
 
@@ -611,6 +694,7 @@ export class MenuService {
         'phoneNumber',
         'formattedAddress',
         'isEasyMenuEnabled',
+        'menuStyle',
       ],
     });
 
@@ -765,6 +849,56 @@ export class MenuService {
       `,
       params,
     );
+  }
+
+  private resolveItemPricing(input: {
+    isMultiPriced: boolean;
+    variantPrices?: Array<{ variantId: string; price: number }> | null;
+    isHalfServed: boolean;
+    halfPrice: number | null | undefined;
+    fullPrice: number | null | undefined;
+    variants: MenuPriceVariant[];
+  }): {
+    isMultiPriced: boolean;
+    variantPrices: MenuItemVariantPrice[];
+    isHalfServed: boolean;
+    halfPrice: number | null;
+    fullPrice: number;
+  } {
+    if (input.isMultiPriced) {
+      const variantPrices = normalizeVariantPrices(
+        input.variantPrices ?? [],
+        input.variants,
+      );
+      if (variantPrices.length === 0) {
+        throw new BadRequestException(
+          'Add at least one price for a procedure or product',
+        );
+      }
+      return {
+        isMultiPriced: true,
+        variantPrices,
+        isHalfServed: false,
+        halfPrice: null,
+        fullPrice: minVariantPrice(variantPrices) ?? 0,
+      };
+    }
+
+    if (
+      input.fullPrice == null ||
+      Number.isNaN(Number(input.fullPrice))
+    ) {
+      throw new BadRequestException('Price is required');
+    }
+    this.assertItemPricing(input.isHalfServed, input.halfPrice);
+
+    return {
+      isMultiPriced: false,
+      variantPrices: [],
+      isHalfServed: Boolean(input.isHalfServed),
+      halfPrice: input.isHalfServed ? (input.halfPrice ?? null) : null,
+      fullPrice: Number(input.fullPrice),
+    };
   }
 
   private assertItemPricing(
