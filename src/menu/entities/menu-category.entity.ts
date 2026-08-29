@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { Location } from '../../locations/entities/location.entity';
+import type { MenuPriceVariant } from '../menu-pricing';
 
 @Entity('menu_categories')
 export class MenuCategory {
@@ -32,6 +33,10 @@ export class MenuCategory {
 
   @Column({ type: 'varchar', length: 120 })
   name: string;
+
+  /** Procedure / product columns shared by multi-priced items in this category. */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  priceVariants: MenuPriceVariant[];
 
   @Column({ type: 'int', default: 0 })
   sortOrder: number;

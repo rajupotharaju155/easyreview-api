@@ -549,6 +549,9 @@ export class HqService {
   ): Promise<Location> {
     const location = await this.findLocationById(id);
     location.isEasyMenuEnabled = dto.isEasyMenuEnabled;
+    if (dto.menuStyle) {
+      location.menuStyle = dto.menuStyle;
+    }
     return this.locationRepository.save(location);
   }
 
