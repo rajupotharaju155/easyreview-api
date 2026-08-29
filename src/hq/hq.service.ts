@@ -694,6 +694,16 @@ export class HqService {
     return saved;
   }
 
+  /**
+   * Deletes an order and its attached order payment(s).
+   */
+  async deleteOrder(id: string): Promise<Order> {
+    const order = await this.findOrderById(id);
+    await this.paymentsService.removeForOrder(order.id);
+    await this.orderRepository.delete(id);
+    return order;
+  }
+
   private resolveOrderListAmount(
     order: Order,
     payment: Payment | null,
