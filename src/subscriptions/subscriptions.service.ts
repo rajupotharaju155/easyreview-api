@@ -4,11 +4,13 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   FindOptionsWhere,
+  LessThan,
   MoreThanOrEqual,
   QueryFailedError,
   Repository,
@@ -21,6 +23,10 @@ import { PaymentProvider } from '../payments/enums/payment-provider.enum';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { PaymentsService } from '../payments/payments.service';
 import { Plan } from '../plans/entities/plan.entity';
+import {
+  Product,
+  productDisplayName,
+} from '../plans/enums/product.enum';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { HqCreateSubscriptionDto } from './dto/hq-create-subscription.dto';
 import { HqSubscriptionsQueryDto } from './dto/hq-subscriptions-query.dto';
@@ -36,7 +42,7 @@ import {
 import { endDateFromDuration, todayIst } from './utils/ist-date.util';
 
 @Injectable()
-export class SubscriptionsService {
+export class SubscriptionsService implements OnModuleInit {
   constructor(
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
@@ -48,6 +54,11 @@ export class SubscriptionsService {
     private readonly paymentsService: PaymentsService,
     private readonly currentUserUtil: CurrentUserUtil,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.backfillSubscriptionProducts();
+    await this.dropLegacyOpenSubscriptionIndex();
+  }
 
   async findAllForUser(
     query: SubscriptionsQueryDto,
@@ -65,10 +76,14 @@ export class SubscriptionsService {
   }
 
   /** Live access: an active subscription whose end date has not passed (IST). */
-  async hasActiveForLocation(locationId: string): Promise<boolean> {
+  async hasActiveForLocation(
+    locationId: string,
+    product: Product = Product.EASY_REVIEW,
+  ): Promise<boolean> {
     const active = await this.subscriptionRepository.findOne({
       where: {
         locationId,
+        product,
         status: SubscriptionStatus.ACTIVE,
         endDate: MoreThanOrEqual(todayIst()),
       },
@@ -114,7 +129,7 @@ export class SubscriptionsService {
     );
     return {
       pdf,
-      filename: `easyreview-invoice-${subscription.id}.pdf`,
+      filename: `${invoiceFileSlug(subscription.product)}-invoice-${subscription.id}.pdf`,
     };
   }
 
@@ -207,7 +222,9 @@ export class SubscriptionsService {
     this.assertDateRange(subscription);
 
     try {
-      return await this.subscriptionRepository.save(subscription);
+      const saved = await this.subscriptionRepository.save(subscription);
+      await this.syncEasyMenuFromSubscription(saved);
+      return saved;
     } catch (error) {
       this.throwIfUniqueViolation(error);
       throw error;
@@ -217,6 +234,10 @@ export class SubscriptionsService {
   async removeForHq(id: string): Promise<Subscription> {
     const subscription = await this.findOneForHq(id);
     await this.subscriptionRepository.delete(id);
+    if (subscription.product === Product.EASY_MENU) {
+      subscription.status = SubscriptionStatus.CANCELLED;
+      await this.syncEasyMenuFromSubscription(subscription);
+    }
     return subscription;
   }
 
@@ -239,7 +260,7 @@ export class SubscriptionsService {
     }
 
     await this.expireOverdue({ locationId: input.location.id });
-    await this.assertNoOpenSubscription(input.location.id);
+    await this.assertNoOpenSubscription(input.location.id, input.plan.product);
 
     const isComplimentary = input.plan.amount === 0;
     const paymentStatus = isComplimentary
@@ -251,6 +272,7 @@ export class SubscriptionsService {
       locationId: input.location.id,
       userId: input.location.userId,
       planId: input.plan.id,
+      product: input.plan.product ?? Product.EASY_REVIEW,
       source: input.source,
       notes: input.notes?.trim() || null,
       gatewaySubscriptionId: null,
@@ -274,7 +296,9 @@ export class SubscriptionsService {
         status: paymentStatus,
         discountAmount: input.payment?.discountAmount,
       });
-      return this.findOneById(saved.id);
+      const created = await this.findOneById(saved.id);
+      await this.syncEasyMenuFromSubscription(created);
+      return created;
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -299,6 +323,7 @@ export class SubscriptionsService {
       subscription.startDate &&
       subscription.endDate
     ) {
+      await this.syncEasyMenuFromSubscription(subscription);
       return subscription;
     }
     const plan =
@@ -311,7 +336,9 @@ export class SubscriptionsService {
       this.throwIfUniqueViolation(error);
       throw error;
     }
-    return this.findOneById(subscriptionId);
+    const activated = await this.findOneById(subscriptionId);
+    await this.syncEasyMenuFromSubscription(activated);
+    return activated;
   }
 
   private async applyStatus(
@@ -380,16 +407,27 @@ export class SubscriptionsService {
     }
   }
 
-  private async assertNoOpenSubscription(locationId: string): Promise<void> {
+  private async assertNoOpenSubscription(
+    locationId: string,
+    product: Product,
+  ): Promise<void> {
     const existing = await this.subscriptionRepository.findOne({
       where: [
-        { locationId, status: SubscriptionStatus.PENDING_PAYMENT },
-        { locationId, status: SubscriptionStatus.ACTIVE },
+        {
+          locationId,
+          product,
+          status: SubscriptionStatus.PENDING_PAYMENT,
+        },
+        {
+          locationId,
+          product,
+          status: SubscriptionStatus.ACTIVE,
+        },
       ],
     });
     if (existing) {
       throw new ConflictException(
-        'This location already has a pending or active subscription',
+        `This location already has a pending or active ${productDisplayName(product)} subscription`,
       );
     }
   }
@@ -398,6 +436,19 @@ export class SubscriptionsService {
     locationId?: string;
     userId?: string;
   }): Promise<void> {
+    const dueWhere: FindOptionsWhere<Subscription> = {
+      status: SubscriptionStatus.ACTIVE,
+      product: Product.EASY_MENU,
+      endDate: LessThan(todayIst()),
+    };
+    if (filter.locationId) dueWhere.locationId = filter.locationId;
+    if (filter.userId) dueWhere.userId = filter.userId;
+
+    const dueEasyMenu = await this.subscriptionRepository.find({
+      where: dueWhere,
+      select: ['locationId'],
+    });
+
     const qb = this.subscriptionRepository
       .createQueryBuilder()
       .update(Subscription)
@@ -415,6 +466,13 @@ export class SubscriptionsService {
     }
 
     await qb.execute();
+
+    const locationIds = [
+      ...new Set(dueEasyMenu.map((item) => item.locationId)),
+    ];
+    for (const locationId of locationIds) {
+      await this.disableEasyMenuIfInactive(locationId);
+    }
   }
 
   private async expireIfOverdue(subscription: Subscription): Promise<void> {
@@ -427,6 +485,7 @@ export class SubscriptionsService {
     }
     subscription.status = SubscriptionStatus.EXPIRED;
     await this.subscriptionRepository.save(subscription);
+    await this.syncEasyMenuFromSubscription(subscription);
   }
 
   private async paginate(
@@ -444,6 +503,7 @@ export class SubscriptionsService {
         'plan.name',
         'plan.amount',
         'plan.currency',
+        'plan.product',
       ])
       .leftJoin('subscription.location', 'location')
       .addSelect(['location.id', 'location.name'])
@@ -507,6 +567,7 @@ export class SubscriptionsService {
       billToName: location?.name ?? 'Business',
       billToLines: billToLines(subscription),
       planName: plan?.name ?? 'Subscription',
+      productName: productDisplayName(subscription.product),
       periodLabel: formatPeriod(subscription.startDate, subscription.endDate),
       amountLabel: formatInvoiceAmount(amount, currency),
       paymentStatusLabel: paymentStatusLabel(
@@ -529,10 +590,77 @@ export class SubscriptionsService {
         .driverError?.code === '23505'
     ) {
       throw new ConflictException(
-        'This location already has a pending or active subscription',
+        'This location already has a pending or active subscription for this product',
       );
     }
   }
+
+  private async syncEasyMenuFromSubscription(
+    subscription: Subscription,
+  ): Promise<void> {
+    if (subscription.product !== Product.EASY_MENU) return;
+
+    if (subscription.status === SubscriptionStatus.ACTIVE) {
+      await this.locationRepository.update(
+        { id: subscription.locationId },
+        { isEasyMenuEnabled: true },
+      );
+      return;
+    }
+
+    if (
+      subscription.status === SubscriptionStatus.EXPIRED ||
+      subscription.status === SubscriptionStatus.CANCELLED
+    ) {
+      await this.disableEasyMenuIfInactive(subscription.locationId);
+    }
+  }
+
+  private async disableEasyMenuIfInactive(locationId: string): Promise<void> {
+    const stillActive = await this.hasActiveForLocation(
+      locationId,
+      Product.EASY_MENU,
+    );
+    if (stillActive) return;
+    await this.locationRepository.update(
+      { id: locationId },
+      { isEasyMenuEnabled: false },
+    );
+  }
+
+  private async backfillSubscriptionProducts(): Promise<void> {
+    await this.subscriptionRepository.query(`
+      UPDATE subscriptions s
+      SET product = p.product
+      FROM plans p
+      WHERE s."planId" = p.id
+        AND s.product IS DISTINCT FROM p.product
+    `);
+  }
+
+  private async dropLegacyOpenSubscriptionIndex(): Promise<void> {
+    const rows: Array<{ indexname: string; indexdef: string }> =
+      await this.subscriptionRepository.query(`
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE tablename = 'subscriptions'
+          AND indexdef ILIKE '%UNIQUE%'
+          AND indexname <> 'subscriptions_pkey'
+          AND indexname <> 'UQ_subscriptions_open_location_product'
+      `);
+
+    for (const row of rows) {
+      const def = row.indexdef.toLowerCase();
+      if (!def.includes('locationid') || def.includes('product')) continue;
+      await this.subscriptionRepository.query(
+        `DROP INDEX IF EXISTS "${row.indexname}"`,
+      );
+    }
+  }
+}
+
+function invoiceFileSlug(product: Product | string | null | undefined): string {
+  return product === Product.EASY_MENU ? 'easymenu' : 'easyreview';
 }
 
 function formatInvoiceDate(value: Date | string | null | undefined): string {

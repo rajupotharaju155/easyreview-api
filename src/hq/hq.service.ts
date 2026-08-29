@@ -26,6 +26,7 @@ import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { PaymentsService } from '../payments/payments.service';
+import { Product, productDisplayName } from '../plans/enums/product.enum';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionStatus } from '../subscriptions/enums/subscription-status.enum';
 import {
@@ -294,8 +295,12 @@ export class HqService {
       .leftJoin(
         Subscription,
         'activeSub',
-        'activeSub.locationId = location.id AND activeSub.status = :activeStatus AND activeSub.endDate >= :today',
-        { activeStatus: SubscriptionStatus.ACTIVE, today },
+        'activeSub.locationId = location.id AND activeSub.status = :activeStatus AND activeSub.endDate >= :today AND activeSub.product = :reviewProduct',
+        {
+          activeStatus: SubscriptionStatus.ACTIVE,
+          today,
+          reviewProduct: Product.EASY_REVIEW,
+        },
       )
       .where('activeSub.id IS NULL');
   }
@@ -329,7 +334,7 @@ export class HqService {
       .leftJoin(
         Subscription,
         'liveSub',
-        'liveSub.locationId = subscription.locationId AND liveSub.status = :activeStatus AND liveSub.endDate >= :today',
+        'liveSub.locationId = subscription.locationId AND liveSub.product = subscription.product AND liveSub.status = :activeStatus AND liveSub.endDate >= :today',
         { activeStatus: SubscriptionStatus.ACTIVE, today },
       )
       .where('liveSub.id IS NULL')
@@ -364,7 +369,9 @@ export class HqService {
       id: subscription.id,
       locationId: subscription.locationId,
       locationName: subscription.location?.name ?? null,
-      planName: subscription.plan?.name ?? null,
+      planName: subscription.plan
+        ? `${productDisplayName(subscription.product)} · ${subscription.plan.name}`
+        : null,
       startDate: subscription.startDate,
       endDate: subscription.endDate,
     };

@@ -12,6 +12,7 @@ import {
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { Location } from '../../locations/entities/location.entity';
 import { Plan } from '../../plans/entities/plan.entity';
+import { Product } from '../../plans/enums/product.enum';
 import { User } from '../../users/entities/user.entity';
 import { SubscriptionSource } from '../enums/subscription-source.enum';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
@@ -20,7 +21,8 @@ import { SubscriptionStatus } from '../enums/subscription-status.enum';
 @Index(['locationId'])
 @Index(['userId'])
 @Index(['status'])
-@Index(['locationId'], {
+@Index(['product'])
+@Index('UQ_subscriptions_open_location_product', ['locationId', 'product'], {
   unique: true,
   where: `"status" IN ('pending_payment', 'active')`,
 })
@@ -52,6 +54,9 @@ export class Subscription {
   @ManyToOne(() => Plan, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'planId' })
   plan: Plan;
+
+  @Column({ type: 'varchar', length: 32, default: Product.EASY_REVIEW })
+  product: Product;
 
   @Column({ type: 'varchar', length: 32 })
   status: SubscriptionStatus;

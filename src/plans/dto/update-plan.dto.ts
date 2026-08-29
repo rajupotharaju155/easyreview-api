@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -14,6 +15,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { Product } from '../enums/product.enum';
 import { PlanFeatureDto } from './plan-feature.dto';
 
 function trimString({ value }: { value: unknown }): unknown {
@@ -43,6 +45,9 @@ export class UpdatePlanDto {
   @MinLength(1)
   @MaxLength(120)
   name?: string;
+
+  @IsEnum(Product)
+  product: Product;
 
   @IsOptional()
   @Type(() => Number)
