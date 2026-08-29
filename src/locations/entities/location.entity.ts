@@ -40,6 +40,9 @@ export class Location {
   @Column({ type: 'boolean', default: false })
   isEasyMenuEnabled: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  isEasyStoryEnabled: boolean;
+
   @Index()
   @Column({ type: 'varchar', length: 255 })
   placeId: string;
