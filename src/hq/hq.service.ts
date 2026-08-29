@@ -21,6 +21,7 @@ import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { LocationsService } from '../locations/locations.service';
 import { STANDEE_DESIGNS } from '../orders/constants/standee.constants';
 import { Order } from '../orders/entities/order.entity';
+import { DesignVariant } from '../orders/enums/design-variant.enum';
 import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
@@ -645,7 +646,8 @@ export class HqService {
   }
 
   /**
-   * Updates editable order fields for HQ (design, contact, address, status).
+   * Updates editable order fields for HQ (design, contact, address, status,
+   * and optional payment discount).
    */
   async updateOrder(id: string, dto: HqUpdateOrderDto): Promise<Order> {
     const order = await this.findOrderById(id);
@@ -660,6 +662,21 @@ export class HqService {
     order.pincode = dto.pincode?.trim() || null;
     order.status = dto.status;
     order.statusNote = dto.statusNote?.trim() || null;
+
+    const payment = await this.paymentRepository.findOne({
+      where: { orderId: order.id },
+      order: { createdAt: 'DESC' },
+    });
+    const listAmount = this.resolveOrderListAmount(order, payment);
+    if (dto.discountAmount !== undefined) {
+      if (dto.discountAmount > listAmount) {
+        throw new BadRequestException(
+          'discountAmount cannot be greater than the order amount',
+        );
+      }
+      order.amountInr = listAmount - dto.discountAmount;
+    }
+
     const saved = await this.orderRepository.save(order);
     if (
       saved.status !== OrderStatus.PLACED &&
@@ -667,7 +684,28 @@ export class HqService {
     ) {
       await this.paymentsService.settleForConfirmedOrder(saved);
     }
+    if (dto.discountAmount !== undefined) {
+      await this.paymentsService.applyDiscountForOrder(
+        saved,
+        dto.discountAmount,
+        listAmount,
+      );
+    }
     return saved;
+  }
+
+  private resolveOrderListAmount(
+    order: Order,
+    payment: Payment | null,
+  ): number {
+    const catalog = STANDEE_DESIGNS[order.designVariant as DesignVariant];
+    if (catalog) {
+      return catalog.priceInr * order.quantity;
+    }
+    if (payment) {
+      return payment.amount + payment.discountAmount;
+    }
+    return order.amountInr;
   }
 
   /**

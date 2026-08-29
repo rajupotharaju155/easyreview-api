@@ -1,10 +1,12 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
+  Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -61,6 +63,12 @@ export class HqUpdateOrderDto {
 
   @IsEnum(OrderStatus)
   status: OrderStatus;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  discountAmount?: number;
 
   @Transform(emptyToNull)
   @IsOptional()
