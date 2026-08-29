@@ -15,7 +15,9 @@ import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Plan } from '../plans/entities/plan.entity';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { istThisAndLastMonth } from '../subscriptions/utils/ist-date.util';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { HqPaymentSummaryDto } from './dto/hq-payment-summary.dto';
 import { HqPaymentsQueryDto } from './dto/hq-payments-query.dto';
 import { MarkPaymentSuccessDto } from './dto/mark-payment-success.dto';
 import { PaymentsQueryDto } from './dto/payments-query.dto';
@@ -25,6 +27,11 @@ import { Payment } from './entities/payment.entity';
 import { PaymentKind } from './enums/payment-kind.enum';
 import { PaymentProvider } from './enums/payment-provider.enum';
 import { PaymentStatus } from './enums/payment-status.enum';
+
+function toCount(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
 
 @Injectable()
 export class PaymentsService {
@@ -102,19 +109,116 @@ export class PaymentsService {
       limit = 10,
       kind,
       status,
+      provider,
+      search,
       locationId,
       userId,
       subscriptionId,
       orderId,
     } = query;
-    const where: FindOptionsWhere<Payment> = {};
-    if (kind) where.kind = kind;
-    if (status) where.status = status;
-    if (locationId) where.locationId = locationId;
-    if (userId) where.userId = userId;
-    if (subscriptionId) where.subscriptionId = subscriptionId;
-    if (orderId) where.orderId = orderId;
-    return this.paginate(where, page, limit);
+    const qb = this.paymentRepository
+      .createQueryBuilder('payment')
+      .leftJoinAndSelect('payment.plan', 'plan')
+      .leftJoinAndSelect('payment.order', 'order')
+      .leftJoinAndSelect('payment.subscription', 'subscription')
+      .leftJoinAndSelect('payment.location', 'location')
+      .orderBy('payment.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (kind) qb.andWhere('payment.kind = :kind', { kind });
+    if (status) qb.andWhere('payment.status = :status', { status });
+    if (provider) qb.andWhere('payment.provider = :provider', { provider });
+    if (locationId) {
+      qb.andWhere('payment.locationId = :locationId', { locationId });
+    }
+    if (userId) qb.andWhere('payment.userId = :userId', { userId });
+    if (subscriptionId) {
+      qb.andWhere('payment.subscriptionId = :subscriptionId', {
+        subscriptionId,
+      });
+    }
+    if (orderId) qb.andWhere('payment.orderId = :orderId', { orderId });
+    const term = search?.trim();
+    if (term) {
+      qb.andWhere(
+        `(
+          payment.id ILIKE :term
+          OR COALESCE(payment.utr, '') ILIKE :term
+          OR COALESCE(location.name, '') ILIKE :term
+          OR COALESCE(order.businessNameSnapshot, '') ILIKE :term
+        )`,
+        { term: `%${term}%` },
+      );
+    }
+
+    const [data, total] = await qb.getManyAndCount();
+    return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  async findSummaryForHq(): Promise<HqPaymentSummaryDto> {
+    const { thisMonth, lastMonth } = istThisAndLastMonth();
+    const raw = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .select(
+        `COALESCE(SUM(CASE WHEN payment.status = :success THEN payment.amount ELSE 0 END), 0)`,
+        'lifetimeAmount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN payment.status = :success THEN 1 END)`,
+        'lifetimeCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :thisStart AND payment.succeededAt < :thisEnd THEN payment.amount ELSE 0 END), 0)`,
+        'thisMonthAmount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN payment.status = :success AND payment.succeededAt >= :thisStart AND payment.succeededAt < :thisEnd THEN 1 END)`,
+        'thisMonthCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :lastStart AND payment.succeededAt < :lastEnd THEN payment.amount ELSE 0 END), 0)`,
+        'lastMonthAmount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN payment.status = :success AND payment.succeededAt >= :lastStart AND payment.succeededAt < :lastEnd THEN 1 END)`,
+        'lastMonthCount',
+      )
+      .setParameters({
+        success: PaymentStatus.SUCCESS,
+        thisStart: thisMonth.startUtc,
+        thisEnd: thisMonth.endExclusiveUtc,
+        lastStart: lastMonth.startUtc,
+        lastEnd: lastMonth.endExclusiveUtc,
+      })
+      .getRawOne<{
+        lifetimeAmount: string | number;
+        lifetimeCount: string | number;
+        thisMonthAmount: string | number;
+        thisMonthCount: string | number;
+        lastMonthAmount: string | number;
+        lastMonthCount: string | number;
+      }>();
+
+    return new HqPaymentSummaryDto({
+      currency: 'INR',
+      lifetime: {
+        amount: toCount(raw?.lifetimeAmount),
+        count: toCount(raw?.lifetimeCount),
+      },
+      thisMonth: {
+        amount: toCount(raw?.thisMonthAmount),
+        count: toCount(raw?.thisMonthCount),
+        from: thisMonth.from,
+        to: thisMonth.to,
+      },
+      lastMonth: {
+        amount: toCount(raw?.lastMonthAmount),
+        count: toCount(raw?.lastMonthCount),
+        from: lastMonth.from,
+        to: lastMonth.to,
+      },
+    });
   }
 
   async findOneForHq(id: string): Promise<Payment> {
@@ -125,6 +229,7 @@ export class PaymentsService {
         order: true,
         plan: true,
         location: true,
+        user: true,
       },
     });
     if (!payment) {
@@ -310,6 +415,38 @@ export class PaymentsService {
   ): Promise<Payment> {
     const payment = await this.findOneForHq(id);
     return this.markSuccess(payment, dto);
+  }
+
+  /**
+   * HQ confirmed (or otherwise progressed) a placed order: treat the matching
+   * order payment as received. Creates a payment if the order never had one.
+   */
+  async settleForConfirmedOrder(order: Order): Promise<Payment> {
+    const pending = await this.paymentRepository.findOne({
+      where: {
+        orderId: order.id,
+        kind: PaymentKind.ORDER,
+        status: PaymentStatus.PENDING,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    if (pending) {
+      return this.markSuccess(pending, {});
+    }
+
+    const existing = await this.paymentRepository.findOne({
+      where: { orderId: order.id, kind: PaymentKind.ORDER },
+      order: { createdAt: 'DESC' },
+    });
+    if (existing) {
+      return this.findOneForHq(existing.id);
+    }
+
+    const created = await this.createForOrder(order);
+    if (created.status === PaymentStatus.PENDING) {
+      return this.markSuccess(created, {});
+    }
+    return created;
   }
 
   async removeForHq(id: string): Promise<Payment> {

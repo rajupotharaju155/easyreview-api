@@ -24,6 +24,7 @@ import { Order } from '../orders/entities/order.entity';
 import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
+import { PaymentsService } from '../payments/payments.service';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionStatus } from '../subscriptions/enums/subscription-status.enum';
 import {
@@ -124,6 +125,7 @@ export class HqService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly locationsService: LocationsService,
+    private readonly paymentsService: PaymentsService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Location)
@@ -658,7 +660,14 @@ export class HqService {
     order.pincode = dto.pincode?.trim() || null;
     order.status = dto.status;
     order.statusNote = dto.statusNote?.trim() || null;
-    return this.orderRepository.save(order);
+    const saved = await this.orderRepository.save(order);
+    if (
+      saved.status !== OrderStatus.PLACED &&
+      saved.status !== OrderStatus.CANCELLED
+    ) {
+      await this.paymentsService.settleForConfirmedOrder(saved);
+    }
+    return saved;
   }
 
   /**

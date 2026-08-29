@@ -23,6 +23,7 @@
     "typeorm": "ts-node ./node_modules/typeorm/cli",
     "script:recent-scans": "ts-node --transpile-only scripts/locations-with-recent-scans.ts",
     "script:grant-old-trial": "ts-node --transpile-only scripts/grant-old-customer-trial.ts",
+    "script:backfill-delivered-order-payments": "ts-node --transpile-only scripts/backfill-delivered-order-payments.ts",
     "migration:create": "npm run typeorm -- migration:create ./migrations/$npm_config_name",
     "migration:run": "npm run typeorm -- migration:run -d ./typeorm.config.ts",
     "migration:run:staging": "NODE_ENV=staging npm run typeorm -- migration:run -d ./typeorm.config.ts",

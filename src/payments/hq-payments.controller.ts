@@ -14,6 +14,7 @@ import {
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { HqGuard } from '../hq/guards/hq.guard';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { HqPaymentSummaryDto } from './dto/hq-payment-summary.dto';
 import { HqPaymentsQueryDto } from './dto/hq-payments-query.dto';
 import { MarkPaymentSuccessDto } from './dto/mark-payment-success.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
@@ -30,6 +31,11 @@ export class HqPaymentsController {
     @Query() query: HqPaymentsQueryDto,
   ): Promise<PaginatedResponseDto<Payment>> {
     return this.paymentsService.findAllForHq(query);
+  }
+
+  @Get('summary')
+  summary(): Promise<HqPaymentSummaryDto> {
+    return this.paymentsService.findSummaryForHq();
   }
 
   @Get(':id')

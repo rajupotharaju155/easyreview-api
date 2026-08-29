@@ -5,6 +5,7 @@ import { Location } from '../locations/entities/location.entity';
 import { LocationsModule } from '../locations/locations.module';
 import { Order } from '../orders/entities/order.entity';
 import { Payment } from '../payments/entities/payment.entity';
+import { PaymentsModule } from '../payments/payments.module';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { User } from '../users/entities/user.entity';
 import { QrCode } from './entities/qr-code.entity';
@@ -16,6 +17,7 @@ import { QrCodesController } from './qr-codes.controller';
   imports: [
     AuthModule,
     LocationsModule,
+    PaymentsModule,
     TypeOrmModule.forFeature([
       User,
       Location,
