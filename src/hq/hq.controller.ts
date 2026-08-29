@@ -197,6 +197,12 @@ export class HqController {
   }
 
   @UseGuards(HqGuard)
+  @Delete('orders/:id')
+  async deleteOrder(@Param('id') id: string): Promise<Order> {
+    return this.hqService.deleteOrder(id);
+  }
+
+  @UseGuards(HqGuard)
   @Get('qr-codes')
   async findQrCodes(
     @Query() query: HqQrCodesQueryDto,

@@ -478,6 +478,17 @@ export class PaymentsService {
     return this.findOneForHq(payment.id);
   }
 
+  /**
+   * Hard-deletes order payments so HQ can remove an order and its collection
+   * record together, including a successful payment.
+   */
+  async removeForOrder(orderId: string): Promise<void> {
+    await this.paymentRepository.delete({
+      orderId,
+      kind: PaymentKind.ORDER,
+    });
+  }
+
   async removeForHq(id: string): Promise<Payment> {
     const payment = await this.findOneForHq(id);
     if (payment.status === PaymentStatus.SUCCESS) {
