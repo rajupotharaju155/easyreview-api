@@ -111,6 +111,7 @@ export class PaymentsService {
       status,
       provider,
       search,
+      excludeZeroAmount,
       locationId,
       userId,
       subscriptionId,
@@ -139,6 +140,9 @@ export class PaymentsService {
       });
     }
     if (orderId) qb.andWhere('payment.orderId = :orderId', { orderId });
+    if (excludeZeroAmount) {
+      qb.andWhere('payment.amount > 0');
+    }
     const term = search?.trim();
     if (term) {
       qb.andWhere(
@@ -447,6 +451,31 @@ export class PaymentsService {
       return this.markSuccess(created, {});
     }
     return created;
+  }
+
+  /**
+   * Apply a discount against a known list price. Works for subscription and
+   * order payments. Creates an order payment if the order has none yet.
+   */
+  async applyDiscountForOrder(
+    order: Order,
+    discountAmount: number,
+    listAmount: number,
+  ): Promise<Payment> {
+    if (discountAmount > listAmount) {
+      throw new BadRequestException(
+        'discountAmount cannot be greater than the order amount',
+      );
+    }
+    const existing = await this.paymentRepository.findOne({
+      where: { orderId: order.id, kind: PaymentKind.ORDER },
+      order: { createdAt: 'DESC' },
+    });
+    const payment = existing ?? (await this.createForOrder(order));
+    payment.discountAmount = discountAmount;
+    payment.amount = listAmount - discountAmount;
+    await this.paymentRepository.save(payment);
+    return this.findOneForHq(payment.id);
   }
 
   async removeForHq(id: string): Promise<Payment> {
