@@ -647,9 +647,10 @@ export class HqService {
    */
   async updateOrder(id: string, dto: HqUpdateOrderDto): Promise<Order> {
     const order = await this.findOrderById(id);
-    const design = STANDEE_DESIGNS[dto.designVariant];
-    order.designVariant = dto.designVariant;
-    order.designName = design.name;
+    if (dto.designVariant) {
+      order.designVariant = dto.designVariant;
+      order.designName = STANDEE_DESIGNS[dto.designVariant].name;
+    }
     order.phoneNumber = dto.phoneNumber.trim();
     order.addressLine1 = dto.addressLine1?.trim() || null;
     order.addressLine2 = dto.addressLine2?.trim() || null;

@@ -19,8 +19,11 @@ function emptyToNull({ value }: { value: unknown }): unknown {
 }
 
 export class HqUpdateOrderDto {
+  // Omit to keep the order on its current design. Orders placed on a retired
+  // design keep a variant that is no longer in the enum, and must stay editable.
+  @IsOptional()
   @IsEnum(DesignVariant)
-  designVariant: DesignVariant;
+  designVariant?: DesignVariant;
 
   @IsString()
   @Matches(/^[6-9]\d{9}$/, {
