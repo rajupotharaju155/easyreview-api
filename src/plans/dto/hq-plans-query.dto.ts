@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
+import { Product } from '../enums/product.enum';
 
 export class HqPlansQueryDto {
   @IsOptional()
@@ -10,4 +11,8 @@ export class HqPlansQueryDto {
   })
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsEnum(Product)
+  product?: Product;
 }

@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { type PlanFeature } from '../constants/plan-feature';
+import { Product } from '../enums/product.enum';
 
 @Entity('plans')
 @Index(['code'], {
@@ -29,6 +30,9 @@ export class Plan {
 
   @Column({ type: 'varchar', length: 120 })
   name: string;
+
+  @Column({ type: 'varchar', length: 32, default: Product.EASY_REVIEW })
+  product: Product;
 
   @Column({ type: 'int' })
   amount: number;

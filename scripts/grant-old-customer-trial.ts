@@ -16,6 +16,7 @@ import { Payment } from '../src/payments/entities/payment.entity';
 import { PaymentKind } from '../src/payments/enums/payment-kind.enum';
 import { PaymentStatus } from '../src/payments/enums/payment-status.enum';
 import { Plan } from '../src/plans/entities/plan.entity';
+import { Product } from '../src/plans/enums/product.enum';
 import { Subscription } from '../src/subscriptions/entities/subscription.entity';
 import { SubscriptionSource } from '../src/subscriptions/enums/subscription-source.enum';
 import { SubscriptionStatus } from '../src/subscriptions/enums/subscription-status.enum';
@@ -127,6 +128,7 @@ async function main(): Promise<void> {
         const open = await subscriptions.findOne({
           where: {
             locationId: location.id,
+            product: Product.EASY_REVIEW,
             status: In([
               SubscriptionStatus.PENDING_PAYMENT,
               SubscriptionStatus.ACTIVE,
@@ -145,6 +147,7 @@ async function main(): Promise<void> {
             locationId: location.id,
             userId: location.userId,
             planId: plan.id,
+            product: plan.product ?? Product.EASY_REVIEW,
             status: SubscriptionStatus.ACTIVE,
             startDate,
             endDate,

@@ -12,6 +12,7 @@ import { CreatePlanDto } from './dto/create-plan.dto';
 import { HqPlansQueryDto } from './dto/hq-plans-query.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { Plan } from './entities/plan.entity';
+import { Product } from './enums/product.enum';
 
 @Injectable()
 export class PlansService implements OnModuleInit {
@@ -30,7 +31,7 @@ export class PlansService implements OnModuleInit {
 
   async findActiveCatalog(): Promise<Plan[]> {
     return this.planRepository.find({
-      where: { isActive: true },
+      where: { isActive: true, product: Product.EASY_REVIEW },
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
   }
@@ -52,6 +53,9 @@ export class PlansService implements OnModuleInit {
 
     if (query.isActive !== undefined) {
       where.isActive = query.isActive;
+    }
+    if (query.product !== undefined) {
+      where.product = query.product;
     }
 
     return this.planRepository.find({
@@ -75,6 +79,7 @@ export class PlansService implements OnModuleInit {
       const plan = this.planRepository.create({
         code: dto.code,
         name: dto.name,
+        product: dto.product,
         amount: dto.amount,
         currency: dto.currency ?? 'INR',
         durationDays: dto.durationDays,
@@ -97,6 +102,7 @@ export class PlansService implements OnModuleInit {
 
     if (dto.code !== undefined) plan.code = dto.code;
     if (dto.name !== undefined) plan.name = dto.name;
+    plan.product = dto.product;
     if (dto.amount !== undefined) plan.amount = dto.amount;
     if (dto.currency !== undefined) plan.currency = dto.currency;
     if (dto.durationDays !== undefined) plan.durationDays = dto.durationDays;

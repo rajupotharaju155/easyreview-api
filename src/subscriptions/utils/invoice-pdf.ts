@@ -25,6 +25,7 @@ export type InvoicePayload = {
   billToName: string;
   billToLines: string[];
   planName: string;
+  productName: string;
   periodLabel: string;
   amountLabel: string;
   paymentStatusLabel: string;
@@ -83,17 +84,17 @@ function drawText(
   page.drawText(pdfSafe(text), { x, y, font, size, color });
 }
 
-function readLogoMarkPng(): Buffer {
+function readLogoPng(): Buffer {
   const candidates = [
-    join(__dirname, '../../assets/logo-mark.png'),
-    join(__dirname, '../../../assets/logo-mark.png'),
-    join(process.cwd(), 'src/assets/logo-mark.png'),
-    join(process.cwd(), 'dist/src/assets/logo-mark.png'),
-    join(process.cwd(), 'dist/assets/logo-mark.png'),
+    join(__dirname, '../../assets/logo.png'),
+    join(__dirname, '../../../assets/logo.png'),
+    join(process.cwd(), 'src/assets/logo.png'),
+    join(process.cwd(), 'dist/src/assets/logo.png'),
+    join(process.cwd(), 'dist/assets/logo.png'),
   ];
   const path = candidates.find((file) => existsSync(file));
   if (!path) {
-    throw new Error('Invoice logo-mark.png was not found in src/assets');
+    throw new Error('Invoice logo.png was not found in src/assets');
   }
   return readFileSync(path);
 }
@@ -107,11 +108,18 @@ export async function buildSubscriptionInvoicePdf(
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
 
   let y = PAGE_HEIGHT - MARGIN;
-  const logo = await doc.embedPng(readLogoMarkPng());
+  const logo = await doc.embedPng(readLogoPng());
   const markWidth = (logo.width / logo.height) * MARK_SIZE;
+  const logoBottom = y - MARK_SIZE;
+  const brandSize = 18;
+  const invoiceSize = 22;
+  const capHeight = (size: number) => size * 0.72;
+  const centeredBaseline = (size: number) =>
+    logoBottom + (MARK_SIZE - capHeight(size)) / 2;
+
   page.drawImage(logo, {
     x: MARGIN,
-    y: y - MARK_SIZE + 8,
+    y: logoBottom,
     width: markWidth,
     height: MARK_SIZE,
   });
@@ -119,19 +127,20 @@ export async function buildSubscriptionInvoicePdf(
     page,
     'EasyReview',
     MARGIN + markWidth + 10,
-    y - 8,
+    centeredBaseline(brandSize),
     bold,
-    18,
+    brandSize,
     PURPLE,
   );
 
+  const invoiceLabel = 'INVOICE';
   drawText(
     page,
-    'INVOICE',
-    PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize('INVOICE', 22),
-    y - 8,
+    invoiceLabel,
+    PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(invoiceLabel, invoiceSize),
+    centeredBaseline(invoiceSize),
     bold,
-    22,
+    invoiceSize,
     INK,
   );
   y -= MARK_SIZE + 12;
@@ -188,7 +197,8 @@ export async function buildSubscriptionInvoicePdf(
   );
   y -= 40;
 
-  const planLines = wrapText(payload.planName, bold, 11, 220);
+  const description = `${payload.productName} - ${payload.planName}`;
+  const planLines = wrapText(description, bold, 11, 220);
   const periodLines = wrapText(payload.periodLabel, regular, 10, 160);
   const rowLines = Math.max(planLines.length, periodLines.length, 1);
   for (let i = 0; i < rowLines; i += 1) {
