@@ -30,7 +30,12 @@ if RUN_SA="$(gcloud run services describe "${CLOUD_RUN_SERVICE}" \
   RUNTIME_SA="${RUN_SA}"
 fi
 
-DEFAULT_ORIGINS=("http://localhost:5173" "http://localhost:4173")
+DEFAULT_ORIGINS=(
+  "http://localhost:5173"
+  "http://localhost:5174"
+  "http://localhost:4173"
+  "https://app.easyreview.co.in"
+)
 ORIGINS=("${DEFAULT_ORIGINS[@]}")
 if [[ -n "${GCS_MENU_CORS_ORIGINS:-}" ]]; then
   IFS=',' read -r -a EXTRA_ORIGINS <<< "${GCS_MENU_CORS_ORIGINS}"

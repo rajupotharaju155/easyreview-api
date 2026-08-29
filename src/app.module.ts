@@ -24,6 +24,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { PrivateFeedbackModule } from './private-feedback/private-feedback.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ReviewModule } from './review/review.module';
+import { StoriesModule } from './stories/stories.module';
 import { UsersModule } from './users/users.module';
 
 /**
@@ -80,6 +81,7 @@ const ignoreEnvFile =
     PaymentsModule,
     PrivateFeedbackModule,
     ReviewModule,
+    StoriesModule,
     EmailModule,
     AnalyticsModule,
   ],
