@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -12,6 +13,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { MenuPriceType } from '../enums/menu-price-type.enum';
 import { MAX_PRICE_VARIANTS } from '../menu-pricing';
 import { ItemVariantPriceDto } from './price-variant.dto';
 
@@ -75,6 +77,10 @@ export class UpdateItemDto {
   halfPrice?: number | null;
 
   @IsOptional()
+  @IsEnum(MenuPriceType)
+  priceType?: MenuPriceType;
+
+  @IsOptional()
   @IsBoolean()
   isMultiPriced?: boolean;
 
@@ -86,9 +92,14 @@ export class UpdateItemDto {
   variantPrices?: ItemVariantPriceDto[];
 
   @IsOptional()
-  @ValidateIf((dto: UpdateItemDto) => dto.isMultiPriced !== true)
+  @ValidateIf(
+    (dto: UpdateItemDto) =>
+      dto.fullPrice != null &&
+      dto.isMultiPriced !== true &&
+      dto.priceType !== MenuPriceType.FREE,
+  )
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  fullPrice?: number;
+  fullPrice?: number | null;
 }

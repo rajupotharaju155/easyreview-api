@@ -9,6 +9,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
 import { MenuStyle } from './enums/menu-style.enum';
+import { MenuPriceType } from './enums/menu-price-type.enum';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { CreateComboDto } from './dto/create-combo.dto';
 import { CreateItemDto } from './dto/create-item.dto';
@@ -50,7 +51,8 @@ export type MenuItemDto = {
   imageUrl: string | null;
   isHalfServed: boolean;
   halfPrice: number | null;
-  fullPrice: number;
+  fullPrice: number | null;
+  priceType: MenuPriceType;
   isMultiPriced: boolean;
   variantPrices: MenuItemVariantPrice[];
   sortOrder: number;
@@ -265,6 +267,7 @@ export class MenuService {
       isHalfServed: Boolean(dto.isHalfServed),
       halfPrice: dto.halfPrice,
       fullPrice: dto.fullPrice,
+      priceType: dto.priceType ?? MenuPriceType.FIXED,
       variants: coercePriceVariants(category.priceVariants),
     });
 
@@ -281,6 +284,7 @@ export class MenuService {
         isHalfServed: pricing.isHalfServed,
         halfPrice: pricing.halfPrice,
         fullPrice: pricing.fullPrice,
+        priceType: pricing.priceType,
         isMultiPriced: pricing.isMultiPriced,
         variantPrices: pricing.variantPrices,
         sortOrder,
@@ -345,11 +349,13 @@ export class MenuService {
       isHalfServed: dto.isHalfServed ?? item.isHalfServed,
       halfPrice: dto.halfPrice !== undefined ? dto.halfPrice : item.halfPrice,
       fullPrice: dto.fullPrice !== undefined ? dto.fullPrice : item.fullPrice,
+      priceType: dto.priceType ?? item.priceType ?? MenuPriceType.FIXED,
       variants: targetVariants,
     });
     item.isHalfServed = pricing.isHalfServed;
     item.halfPrice = pricing.halfPrice;
     item.fullPrice = pricing.fullPrice;
+    item.priceType = pricing.priceType;
     item.isMultiPriced = pricing.isMultiPriced;
     item.variantPrices = pricing.variantPrices;
 
@@ -638,6 +644,7 @@ export class MenuService {
       isHalfServed: item.isHalfServed,
       halfPrice: item.halfPrice,
       fullPrice: item.fullPrice,
+      priceType: item.priceType ?? MenuPriceType.FIXED,
       isMultiPriced: Boolean(item.isMultiPriced),
       variantPrices: coerceVariantPrices(item.variantPrices),
       sortOrder: item.sortOrder,
@@ -857,13 +864,15 @@ export class MenuService {
     isHalfServed: boolean;
     halfPrice: number | null | undefined;
     fullPrice: number | null | undefined;
+    priceType: MenuPriceType;
     variants: MenuPriceVariant[];
   }): {
     isMultiPriced: boolean;
     variantPrices: MenuItemVariantPrice[];
     isHalfServed: boolean;
     halfPrice: number | null;
-    fullPrice: number;
+    fullPrice: number | null;
+    priceType: MenuPriceType;
   } {
     if (input.isMultiPriced) {
       const variantPrices = normalizeVariantPrices(
@@ -881,6 +890,25 @@ export class MenuService {
         isHalfServed: false,
         halfPrice: null,
         fullPrice: minVariantPrice(variantPrices) ?? 0,
+        priceType: MenuPriceType.FIXED,
+      };
+    }
+
+    const priceType =
+      input.isHalfServed ||
+      (input.priceType !== MenuPriceType.ONWARDS &&
+        input.priceType !== MenuPriceType.FREE)
+        ? MenuPriceType.FIXED
+        : input.priceType;
+
+    if (priceType === MenuPriceType.FREE) {
+      return {
+        isMultiPriced: false,
+        variantPrices: [],
+        isHalfServed: false,
+        halfPrice: null,
+        fullPrice: null,
+        priceType: MenuPriceType.FREE,
       };
     }
 
@@ -898,6 +926,7 @@ export class MenuService {
       isHalfServed: Boolean(input.isHalfServed),
       halfPrice: input.isHalfServed ? (input.halfPrice ?? null) : null,
       fullPrice: Number(input.fullPrice),
+      priceType,
     };
   }
 
