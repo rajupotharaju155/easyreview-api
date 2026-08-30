@@ -56,6 +56,7 @@ export type MenuItemDto = {
   isMultiPriced: boolean;
   variantPrices: MenuItemVariantPrice[];
   sortOrder: number;
+  createdAt: Date;
 };
 
 export type MenuCategoryDto = {
@@ -222,9 +223,7 @@ export class MenuService {
       select: ['id', 'imageUrl'],
     });
     const itemIds = items.map((item) => item.id);
-    const imageUrls = items
-      .map((item) => item.imageUrl)
-      .filter((url): url is string => Boolean(url));
+    const imageUrls = items.map((item) => item.imageUrl);
 
     await this.dataSource.transaction(async (manager) => {
       if (itemIds.length > 0) {
@@ -236,7 +235,7 @@ export class MenuService {
       await manager.softDelete(MenuCategory, { id: category.id });
     });
 
-    await Promise.all(imageUrls.map((url) => this.menuStorage.deleteIfManaged(url)));
+    await this.deleteManagedImagesIfUnused(locationId, imageUrls);
   }
 
   async uploadItemImage(
@@ -365,7 +364,7 @@ export class MenuService {
       previousImageUrl &&
       previousImageUrl !== item.imageUrl
     ) {
-      await this.menuStorage.deleteIfManaged(previousImageUrl);
+      await this.deleteManagedImagesIfUnused(locationId, [previousImageUrl]);
     }
     return this.toItemDto(item);
   }
@@ -379,7 +378,7 @@ export class MenuService {
       await manager.delete(MenuSpecial, { menuItemId: item.id });
       await manager.softDelete(MenuItem, { id: item.id });
     });
-    await this.menuStorage.deleteIfManaged(item.imageUrl);
+    await this.deleteManagedImagesIfUnused(locationId, [item.imageUrl]);
   }
 
   async moveItem(
@@ -648,6 +647,7 @@ export class MenuService {
       isMultiPriced: Boolean(item.isMultiPriced),
       variantPrices: coerceVariantPrices(item.variantPrices),
       sortOrder: item.sortOrder,
+      createdAt: item.createdAt,
     };
   }
 
@@ -939,6 +939,25 @@ export class MenuService {
         'Half price is required when the item is served as half',
       );
     }
+  }
+
+  private async deleteManagedImagesIfUnused(
+    locationId: string,
+    imageUrls: Array<string | null | undefined>,
+  ): Promise<void> {
+    const uniqueUrls = [
+      ...new Set(imageUrls.filter((url): url is string => Boolean(url))),
+    ];
+    await Promise.all(
+      uniqueUrls.map(async (url) => {
+        const stillUsed = await this.itemRepository.count({
+          where: { locationId, imageUrl: url },
+        });
+        if (stillUsed === 0) {
+          await this.menuStorage.deleteIfManaged(url);
+        }
+      }),
+    );
   }
 
   private assertImageUrl(imageUrl: string | null | undefined): void {
