@@ -9,6 +9,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
 import { MenuStyle } from './enums/menu-style.enum';
+import { MenuPriceType } from './enums/menu-price-type.enum';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { CreateComboDto } from './dto/create-combo.dto';
 import { CreateItemDto } from './dto/create-item.dto';
@@ -50,10 +51,12 @@ export type MenuItemDto = {
   imageUrl: string | null;
   isHalfServed: boolean;
   halfPrice: number | null;
-  fullPrice: number;
+  fullPrice: number | null;
+  priceType: MenuPriceType;
   isMultiPriced: boolean;
   variantPrices: MenuItemVariantPrice[];
   sortOrder: number;
+  createdAt: Date;
 };
 
 export type MenuCategoryDto = {
@@ -220,9 +223,7 @@ export class MenuService {
       select: ['id', 'imageUrl'],
     });
     const itemIds = items.map((item) => item.id);
-    const imageUrls = items
-      .map((item) => item.imageUrl)
-      .filter((url): url is string => Boolean(url));
+    const imageUrls = items.map((item) => item.imageUrl);
 
     await this.dataSource.transaction(async (manager) => {
       if (itemIds.length > 0) {
@@ -234,7 +235,7 @@ export class MenuService {
       await manager.softDelete(MenuCategory, { id: category.id });
     });
 
-    await Promise.all(imageUrls.map((url) => this.menuStorage.deleteIfManaged(url)));
+    await this.deleteManagedImagesIfUnused(locationId, imageUrls);
   }
 
   async uploadItemImage(
@@ -265,6 +266,7 @@ export class MenuService {
       isHalfServed: Boolean(dto.isHalfServed),
       halfPrice: dto.halfPrice,
       fullPrice: dto.fullPrice,
+      priceType: dto.priceType ?? MenuPriceType.FIXED,
       variants: coercePriceVariants(category.priceVariants),
     });
 
@@ -281,6 +283,7 @@ export class MenuService {
         isHalfServed: pricing.isHalfServed,
         halfPrice: pricing.halfPrice,
         fullPrice: pricing.fullPrice,
+        priceType: pricing.priceType,
         isMultiPriced: pricing.isMultiPriced,
         variantPrices: pricing.variantPrices,
         sortOrder,
@@ -345,11 +348,13 @@ export class MenuService {
       isHalfServed: dto.isHalfServed ?? item.isHalfServed,
       halfPrice: dto.halfPrice !== undefined ? dto.halfPrice : item.halfPrice,
       fullPrice: dto.fullPrice !== undefined ? dto.fullPrice : item.fullPrice,
+      priceType: dto.priceType ?? item.priceType ?? MenuPriceType.FIXED,
       variants: targetVariants,
     });
     item.isHalfServed = pricing.isHalfServed;
     item.halfPrice = pricing.halfPrice;
     item.fullPrice = pricing.fullPrice;
+    item.priceType = pricing.priceType;
     item.isMultiPriced = pricing.isMultiPriced;
     item.variantPrices = pricing.variantPrices;
 
@@ -359,7 +364,7 @@ export class MenuService {
       previousImageUrl &&
       previousImageUrl !== item.imageUrl
     ) {
-      await this.menuStorage.deleteIfManaged(previousImageUrl);
+      await this.deleteManagedImagesIfUnused(locationId, [previousImageUrl]);
     }
     return this.toItemDto(item);
   }
@@ -373,7 +378,7 @@ export class MenuService {
       await manager.delete(MenuSpecial, { menuItemId: item.id });
       await manager.softDelete(MenuItem, { id: item.id });
     });
-    await this.menuStorage.deleteIfManaged(item.imageUrl);
+    await this.deleteManagedImagesIfUnused(locationId, [item.imageUrl]);
   }
 
   async moveItem(
@@ -638,9 +643,11 @@ export class MenuService {
       isHalfServed: item.isHalfServed,
       halfPrice: item.halfPrice,
       fullPrice: item.fullPrice,
+      priceType: item.priceType ?? MenuPriceType.FIXED,
       isMultiPriced: Boolean(item.isMultiPriced),
       variantPrices: coerceVariantPrices(item.variantPrices),
       sortOrder: item.sortOrder,
+      createdAt: item.createdAt,
     };
   }
 
@@ -857,13 +864,15 @@ export class MenuService {
     isHalfServed: boolean;
     halfPrice: number | null | undefined;
     fullPrice: number | null | undefined;
+    priceType: MenuPriceType;
     variants: MenuPriceVariant[];
   }): {
     isMultiPriced: boolean;
     variantPrices: MenuItemVariantPrice[];
     isHalfServed: boolean;
     halfPrice: number | null;
-    fullPrice: number;
+    fullPrice: number | null;
+    priceType: MenuPriceType;
   } {
     if (input.isMultiPriced) {
       const variantPrices = normalizeVariantPrices(
@@ -881,6 +890,25 @@ export class MenuService {
         isHalfServed: false,
         halfPrice: null,
         fullPrice: minVariantPrice(variantPrices) ?? 0,
+        priceType: MenuPriceType.FIXED,
+      };
+    }
+
+    const priceType =
+      input.isHalfServed ||
+      (input.priceType !== MenuPriceType.ONWARDS &&
+        input.priceType !== MenuPriceType.FREE)
+        ? MenuPriceType.FIXED
+        : input.priceType;
+
+    if (priceType === MenuPriceType.FREE) {
+      return {
+        isMultiPriced: false,
+        variantPrices: [],
+        isHalfServed: false,
+        halfPrice: null,
+        fullPrice: null,
+        priceType: MenuPriceType.FREE,
       };
     }
 
@@ -898,6 +926,7 @@ export class MenuService {
       isHalfServed: Boolean(input.isHalfServed),
       halfPrice: input.isHalfServed ? (input.halfPrice ?? null) : null,
       fullPrice: Number(input.fullPrice),
+      priceType,
     };
   }
 
@@ -910,6 +939,25 @@ export class MenuService {
         'Half price is required when the item is served as half',
       );
     }
+  }
+
+  private async deleteManagedImagesIfUnused(
+    locationId: string,
+    imageUrls: Array<string | null | undefined>,
+  ): Promise<void> {
+    const uniqueUrls = [
+      ...new Set(imageUrls.filter((url): url is string => Boolean(url))),
+    ];
+    await Promise.all(
+      uniqueUrls.map(async (url) => {
+        const stillUsed = await this.itemRepository.count({
+          where: { locationId, imageUrl: url },
+        });
+        if (stillUsed === 0) {
+          await this.menuStorage.deleteIfManaged(url);
+        }
+      }),
+    );
   }
 
   private assertImageUrl(imageUrl: string | null | undefined): void {

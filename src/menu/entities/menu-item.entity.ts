@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { Location } from '../../locations/entities/location.entity';
+import { MenuPriceType } from '../enums/menu-price-type.enum';
 import type { MenuItemVariantPrice } from '../menu-pricing';
 import { MenuCategory } from './menu-category.entity';
 
@@ -63,8 +64,15 @@ export class MenuItem {
   @Column({ type: 'double precision', nullable: true })
   halfPrice: number | null;
 
-  @Column({ type: 'double precision' })
-  fullPrice: number;
+  @Column({ type: 'double precision', nullable: true })
+  fullPrice: number | null;
+
+  @Column({
+    type: 'varchar',
+    length: 16,
+    default: MenuPriceType.FIXED,
+  })
+  priceType: MenuPriceType;
 
   @Column({ type: 'boolean', default: false })
   isMultiPriced: boolean;
