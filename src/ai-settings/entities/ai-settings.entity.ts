@@ -18,7 +18,7 @@ export const AI_MAX_OPTIONS = 10;
 export const AI_QUESTION_MAX_LENGTH = 120;
 export const AI_OPTION_MAX_LENGTH = 40;
 export const AI_MAX_KEYWORDS = 20;
-export const AI_MAX_LANGUAGES = 10;
+export const AI_MAX_LANGUAGES = 2;
 export const AI_KEYWORD_MAX_LENGTH = 40;
 export const AI_LANGUAGE_MAX_LENGTH = 40;
 

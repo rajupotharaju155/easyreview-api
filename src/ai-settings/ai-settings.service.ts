@@ -19,7 +19,11 @@ import { AiQuestionDto } from './dto/ai-question.dto';
 import { AiSettingsResponseDto } from './dto/ai-settings-response.dto';
 import { ProfileCompletenessResponseDto } from './dto/profile-completeness-response.dto';
 import { UpsertAiSettingsDto } from './dto/upsert-ai-settings.dto';
-import { AiQuestion, AiSettings } from './entities/ai-settings.entity';
+import {
+  AI_MAX_LANGUAGES,
+  AiQuestion,
+  AiSettings,
+} from './entities/ai-settings.entity';
 
 export type SubmittedAnswer = {
   question: string;
@@ -124,7 +128,7 @@ export class AiSettingsService {
         ? this.withQuestionDefaults(settings.questions)
         : [],
       keywords: settings?.keywords ?? null,
-      languages: settings?.languages ?? null,
+      languages: settings?.languages?.slice(0, AI_MAX_LANGUAGES) ?? null,
     };
   }
 
@@ -260,7 +264,7 @@ export class AiSettingsService {
       questions: this.withQuestionDefaults(settings?.questions),
       questionsEnabled: settings?.questionsEnabled ?? true,
       keywords: settings?.keywords ?? [],
-      languages: settings?.languages ?? [],
+      languages: (settings?.languages ?? []).slice(0, AI_MAX_LANGUAGES),
     });
   }
 

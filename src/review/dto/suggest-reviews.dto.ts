@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  AI_MAX_LANGUAGES,
   AI_MAX_OPTIONS,
   AI_MAX_QUESTIONS,
   AI_OPTION_MAX_LENGTH,
@@ -93,7 +94,7 @@ export class SuggestReviewsDto {
 
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(AI_MAX_LANGUAGES)
   @IsString({ each: true })
   languages: string[];
 
