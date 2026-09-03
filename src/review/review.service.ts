@@ -34,7 +34,7 @@ const PROMPT_BUILDERS = {
 } as const;
 type PromptVersion = keyof typeof PROMPT_BUILDERS;
 /** Share of requests that still use the original prompt. */
-const V1_PROMPT_CHANCE = 0.5;
+const V1_PROMPT_CHANCE = 0.9;
 
 /** Item count is pinned so the model cannot return fewer drafts than we asked for. */
 const RESPONSE_SCHEMA = {
