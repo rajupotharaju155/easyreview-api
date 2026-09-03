@@ -62,8 +62,7 @@ export function buildV1Prompt(ctx: ReviewPromptContext): string {
     'Return ONLY valid JSON matching this shape:',
     '{"suggestions":[{"text":"...","language":"..."}]}',
     '',
-    'Business:',
-    `- Name: ${ctx.name}`,
+    `The customer visited ${ctx.name}.`,
     ctx.primaryTypeDisplayName
       ? `- Category: ${ctx.primaryTypeDisplayName}`
       : null,
@@ -90,6 +89,7 @@ export function buildV1Prompt(ctx: ReviewPromptContext): string {
       : null,
     '- Match the tone to the star rating (higher = more positive; lower = polite constructive).',
     '- Sound like a real customer, not marketing copy.',
+    '- If the business name is in all caps, do not write it in all caps. Weave it into the sentence the way a customer would. You may use the full name, a shortened everyday name, or just the kind of place. Example: "CRUSH MENS BEAUTY PARLOUR AND SALOON" can become "Crush salon", "Crush mens salon", or just "salon".',
     '- Do not invent specific staff names, prices, or unverifiable claims.',
     '- Do not include hashtags, emojis, or quotation marks around the whole review.',
     '- For any language that is not English, write in that language using Latin/English script only (transliteration). Never use native scripts such as Telugu, Hindi, or Arabic script.',
@@ -104,6 +104,9 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
   const answers = answerLines(ctx);
   const voice = pickOne(VOICES);
   const topicHint = pickTopicHint(ctx.keywords);
+  const openings = ctx.wordTargets.map(() =>
+    pickOne(['capital', 'lowercase'] as const),
+  );
 
   return joinPrompt([
     'You write Google review drafts as if you are the customer typing on a phone right after the visit.',
@@ -127,10 +130,13 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
       : []),
     '',
     `Generate exactly ${ctx.wordTargets.length} review drafts with these exact specs:`,
-    ...specLines(ctx),
+    ...specLines(ctx).map(
+      (line, index) => `${line}, firstLetter=${openings[index]}`,
+    ),
     '',
     'Rules:',
     '- Write like a person, not a copywriter. Contractions. Uneven sentence length. It is fine to stop abruptly.',
+    '- Start each draft with a capital or lowercase letter as specified in firstLetter. Do not make every draft start lowercase.',
     '- In at least one draft, start a later sentence with "..." as if a new thought. Do not start the whole review with dots.',
     '- Leave 1–2 small grammar slips per draft (missing apostrophe, dropped "a"/"the", no capital after a period). Do not misspell service words or make the review hard to read.',
     '- Do not mention the business name, city, or area.',
@@ -155,8 +161,8 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
     '- Aim for approximately the target word count for each review (±15%).',
     '',
     'Register to match (tone only — do not reuse these words or phrases):',
-    '- "did a good job, didnt rush it. ...wait was bit long though"',
+    '- "Did a good job, didnt rush it. ...wait was bit long though"',
     '- "came in for the usual. decent, not much talk which i liked"',
-    '- "better then last time. bit pricey but fine"',
+    '- "Better then last time. bit pricey but fine"',
   ]);
 }
