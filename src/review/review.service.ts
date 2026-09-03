@@ -6,16 +6,18 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI, Schema, ThinkingLevel, Type } from '@google/genai';
-import {
-  AiSettingsService,
-  SubmittedAnswer,
-} from '../ai-settings/ai-settings.service';
+import { AiSettingsService } from '../ai-settings/ai-settings.service';
 import { LocationsService } from '../locations/locations.service';
 import {
   ReviewSuggestionDto,
   ReviewSuggestionsResponseDto,
 } from './dto/review-suggestions-response.dto';
 import { SuggestReviewsDto } from './dto/suggest-reviews.dto';
+import {
+  buildV1Prompt,
+  buildV2Prompt,
+  ReviewPromptContext,
+} from './prompt-helper';
 
 /**
  * One short and one medium draft. Randomized per request so a location's reviews
@@ -26,6 +28,13 @@ const WORD_TARGET_RANGES = [
   { min: 30, max: 45 },
 ] as const;
 const GEMINI_MODEL = 'gemini-3.6-flash';
+const PROMPT_BUILDERS = {
+  v1: buildV1Prompt,
+  v2: buildV2Prompt,
+} as const;
+type PromptVersion = keyof typeof PROMPT_BUILDERS;
+/** Share of requests that still use the original prompt. */
+const V1_PROMPT_CHANCE = 0.5;
 
 /** Item count is pinned so the model cannot return fewer drafts than we asked for. */
 const RESPONSE_SCHEMA = {
@@ -79,24 +88,33 @@ export class ReviewService {
       languages,
       wordTargets.length,
     );
-    const prompt = this.buildPrompt(
-      dto,
+    const promptVersion = this.pickPromptVersion();
+    this.logger.log(`\nChose review prompt ${promptVersion}`);
+    const promptContext: ReviewPromptContext = {
+      name: dto.name,
+      city: dto.city,
+      state: dto.state,
+      primaryTypeDisplayName: dto.primaryTypeDisplayName,
+      starRating: dto.starRating,
       keywords,
       assignedLanguages,
       answers,
       wordTargets,
-    );
+    };
+    const prompt = PROMPT_BUILDERS[promptVersion](promptContext);
 
     if (process.env.NODE_ENV === 'development') {
-      this.logger.log(`Skipping Gemini. Prompt would be:\n${prompt}`);
+      this.logger.log(
+        `Skipping Gemini (${promptVersion}). Prompt would be:\n${prompt}`,
+      );
       await new Promise((resolve) => setTimeout(resolve, 3000));
       const mockResponse = new ReviewSuggestionsResponseDto([
         {
-          text: 'Expected this to be the best saloon in Gajwel, but my experience was very disappointing. The service was quite poor today.',
+          text: 'beard trim came out neat, they didnt rush it. bit of a wait though',
           language: 'English',
         },
         {
-          text: 'Gajwel lo unna CRUSH MENS BEAUTY PARLOUR & SALOON ki vellanu. Pedda ga emi baaledu. Friendly staff untaru ani vinnanu kaani ikkada service bilkul nachaledu. Good massage kosam vella kaani chala disappointing ga anipinchindi. Malli ikadiki vellanum anukovatledhu. Improvements avasaram.',
+          text: 'trim kosam vella, job manchiga chestunnaru. wait konchem ekkuva kani okay',
           language: 'Telugu',
         },
       ]);
@@ -114,6 +132,8 @@ export class ReviewService {
         config: {
           responseMimeType: 'application/json',
           responseSchema: RESPONSE_SCHEMA,
+          // Slightly above default so batches from the same shop diverge.
+          temperature: 1.1,
           // Gemini 3 defaults to high thinking, which cost ~10s on a page the
           // customer is waiting on. Short drafts need no reasoning budget.
           thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
@@ -182,6 +202,10 @@ export class ReviewService {
     );
   }
 
+  private pickPromptVersion(): PromptVersion {
+    return Math.random() < V1_PROMPT_CHANCE ? 'v1' : 'v2';
+  }
+
   /** Prefer English for extra slots so 2 langs → 2 English + 1 other. */
   private assignLanguages(languages: string[], count: number): string[] {
     const ordered = [...languages].sort((a, b) => {
@@ -195,69 +219,6 @@ export class ReviewService {
       { length: count },
       (_, index) => ordered[index % ordered.length],
     );
-  }
-
-  private buildPrompt(
-    dto: SuggestReviewsDto,
-    keywords: string[],
-    assignedLanguages: string[],
-    answers: SubmittedAnswer[],
-    wordTargets: number[],
-  ): string {
-    const locationParts = [dto.city, dto.state].filter(Boolean).join(', ');
-    const specs = wordTargets.map((wordCount, index) => ({
-      index: index + 1,
-      language: assignedLanguages[index],
-      targetWordCount: wordCount,
-    }));
-    const answerLines = answers.map(
-      ({ question, answers: selected }) => `- ${question}: ${selected.join(', ')}`,
-    );
-
-    return [
-      'You write short, authentic Google review drafts for customers.',
-      'Return ONLY valid JSON matching this shape:',
-      '{"suggestions":[{"text":"...","language":"..."}]}',
-      '',
-      'Business:',
-      `- Name: ${dto.name}`,
-      dto.primaryTypeDisplayName
-        ? `- Category: ${dto.primaryTypeDisplayName}`
-        : null,
-      locationParts ? `- Location: ${locationParts}` : null,
-      `- Customer star rating: ${dto.starRating} out of 5`,
-      `- Keywords to naturally weave in when relevant: ${keywords.join(', ') || 'none'}`,
-      ...(answerLines.length
-        ? ['', 'What this customer told us about their visit:', ...answerLines]
-        : []),
-      '',
-      `Generate exactly ${wordTargets.length} review drafts with these exact specs:`,
-      ...specs.map(
-        (spec) =>
-          `${spec.index}. language="${spec.language}", targetWordCount=${spec.targetWordCount}`,
-      ),
-      '',
-      'Rules:',
-      ...(answerLines.length
-        ? [
-            '- Ground every draft in the visit details above; treat them as facts about this specific customer.',
-            '- Work those details into the sentences. Never list them or echo the question wording.',
-            '- If the customer named several things, include all of them naturally — they are all true of this visit.',
-          ]
-        : []),
-      dto.primaryTypeDisplayName
-        ? '- Only mention services, staff roles, and details that a customer of this category would plausibly experience.'
-        : null,
-      '- Match the tone to the star rating (higher = more positive; lower = polite constructive).',
-      '- Sound like a real customer, not marketing copy.',
-      '- Do not invent specific staff names, prices, or unverifiable claims.',
-      '- Do not include hashtags, emojis, or quotation marks around the whole review.',
-      '- For any language that is not English, write in that language using Latin/English script only (transliteration). Never use native scripts such as Telugu, Hindi, or Arabic script.',
-      '- Aim for approximately the target word count for each review (±15%).',
-      '- Keep each suggestion distinct in wording.',
-    ]
-      .filter((line) => line !== null)
-      .join('\n');
   }
 
   private parseSuggestions(

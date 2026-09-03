@@ -45,6 +45,10 @@ export class QrCode {
   @Column({ type: 'boolean', nullable: true })
   isMenuQr: boolean | null;
 
+  /** True once the physical standee for this code has been printed. */
+  @Column({ type: 'boolean', default: false })
+  isPrinted: boolean;
+
   @Column({ type: 'timestamptz', nullable: true })
   assignedAt: Date | null;
 
