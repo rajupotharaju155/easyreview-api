@@ -39,6 +39,8 @@
     "gcp:scheduler:production": "bash scripts/setup-scheduler.sh production",
     "gcp:menu-bucket:staging": "bash scripts/setup-menu-bucket.sh staging",
     "gcp:menu-bucket:production": "bash scripts/setup-menu-bucket.sh production",
+    "gcp:qr-products-bucket:staging": "bash scripts/setup-qr-products-bucket.sh staging",
+    "gcp:qr-products-bucket:production": "bash scripts/setup-qr-products-bucket.sh production",
     "deploy:staging": "bash scripts/deploy-cloud-run.sh staging",
     "deploy:production": "bash scripts/deploy-cloud-run.sh production"
   },
