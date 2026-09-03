@@ -30,6 +30,7 @@ import { HqUpdateLocationEasyMenuDto } from './dto/hq-update-location-easy-menu.
 import { HqUpdateLocationEasyStoryDto } from './dto/hq-update-location-easy-story.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
+import { HqUpdateQrPrintedDto } from './dto/hq-update-qr-printed.dto';
 import { HqUpdateUserDto } from './dto/hq-update-user.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
@@ -224,6 +225,15 @@ export class HqController {
   @HttpCode(HttpStatus.OK)
   async assignQrCode(@Body() dto: HqAssignQrCodeDto): Promise<QrCode> {
     return this.hqService.assignQrCode(dto);
+  }
+
+  @UseGuards(HqGuard)
+  @Patch('qr-codes/:id/printed')
+  async updateQrPrinted(
+    @Param('id') id: string,
+    @Body() dto: HqUpdateQrPrintedDto,
+  ): Promise<QrCode> {
+    return this.hqService.updateQrPrinted(id, dto);
   }
 
   @UseGuards(HqGuard)

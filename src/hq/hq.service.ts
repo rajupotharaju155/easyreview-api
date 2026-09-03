@@ -43,6 +43,7 @@ import { HqUpdateLocationEasyMenuDto } from './dto/hq-update-location-easy-menu.
 import { HqUpdateLocationEasyStoryDto } from './dto/hq-update-location-easy-story.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
+import { HqUpdateQrPrintedDto } from './dto/hq-update-qr-printed.dto';
 import { HqUpdateUserDto } from './dto/hq-update-user.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
@@ -757,6 +758,7 @@ export class HqService {
           locationId: null,
           targetUrl: null,
           isMenuQr: null,
+          isPrinted: false,
           assignedAt: null,
         }),
       );
@@ -820,6 +822,24 @@ export class HqService {
   }
 
   /**
+   * Marks (or unmarks) a QR code as printed.
+   */
+  async updateQrPrinted(
+    id: string,
+    dto: HqUpdateQrPrintedDto,
+  ): Promise<QrCode> {
+    const qr = await this.qrCodeRepository.findOne({
+      where: { id },
+      relations: ['location'],
+    });
+    if (!qr) {
+      throw new NotFoundException(`QR code with id "${id}" not found`);
+    }
+    qr.isPrinted = dto.isPrinted;
+    return this.qrCodeRepository.save(qr);
+  }
+
+  /**
    * Clears location assignment so the physical QR can be reused or deleted.
    */
   async unassignQrCode(id: string): Promise<QrCode> {
@@ -880,6 +900,7 @@ export class HqService {
         'qr.batchId',
         'qr.locationId',
         'qr.isMenuQr',
+        'qr.isPrinted',
         'qr.createdAt',
       ])
       .leftJoin('qr.location', 'location')
@@ -919,6 +940,7 @@ export class HqService {
       batchId: qr.batchId,
       locationId: qr.locationId,
       isMenuQr: qr.isMenuQr,
+      isPrinted: qr.isPrinted,
       location: qr.location
         ? {
             id: qr.location.id,
