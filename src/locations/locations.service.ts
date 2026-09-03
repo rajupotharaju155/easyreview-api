@@ -137,6 +137,8 @@ export class LocationsService {
         },
       );
 
+      await this.tryGrantAdminDemoSubscription(savedLocation);
+
       return this.withScanSummary(savedLocation);
     } catch (error) {
       if (this.isForeignKeyViolation(error)) {
@@ -148,6 +150,20 @@ export class LocationsService {
         );
       }
       throw error;
+    }
+  }
+
+  private async tryGrantAdminDemoSubscription(
+    location: Location,
+  ): Promise<void> {
+    try {
+      await this.subscriptionsService.grantAdminDemoIfEligible(location);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to grant admin demo subscription for location ${location.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 

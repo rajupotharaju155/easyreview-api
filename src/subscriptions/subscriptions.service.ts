@@ -27,6 +27,10 @@ import {
   Product,
   productDisplayName,
 } from '../plans/enums/product.enum';
+import {
+  getAdminDemoSubscription,
+  isAdminDemoAccount,
+} from './constants/admin-demo-subscription.constants';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { HqCreateSubscriptionDto } from './dto/hq-create-subscription.dto';
 import { HqSubscriptionsQueryDto } from './dto/hq-subscriptions-query.dto';
@@ -197,6 +201,28 @@ export class SubscriptionsService implements OnModuleInit {
         status: dto.paymentStatus ?? PaymentStatus.SUCCESS,
         discountAmount: dto.discountAmount,
       },
+    });
+  }
+
+  /**
+   * Auto-activates the 2 Day Demo plan when an eligible account adds a location.
+   */
+  async grantAdminDemoIfEligible(location: Location): Promise<Subscription | null> {
+    const config = getAdminDemoSubscription();
+    const user = this.currentUserUtil.getCurrentUserOrNull();
+    if (!config || !user || !isAdminDemoAccount(user, config)) {
+      return null;
+    }
+    if (location.userId !== config.userId) {
+      return null;
+    }
+
+    return this.createSubscription({
+      location,
+      plan: await this.findPlan(config.planId),
+      source: SubscriptionSource.HQ,
+      notes: config.notes,
+      payment: { status: PaymentStatus.SUCCESS },
     });
   }
 

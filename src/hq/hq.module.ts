@@ -12,6 +12,11 @@ import { QrCode } from './entities/qr-code.entity';
 import { HqController } from './hq.controller';
 import { HqService } from './hq.service';
 import { QrCodesController } from './qr-codes.controller';
+import { QrProductCategory } from './qr-products/entities/qr-product-category.entity';
+import { QrProduct } from './qr-products/entities/qr-product.entity';
+import { QrProductsController } from './qr-products/qr-products.controller';
+import { QrProductsService } from './qr-products/qr-products.service';
+import { QrProductsStorageService } from './qr-products/qr-products-storage.service';
 
 @Module({
   imports: [
@@ -23,12 +28,14 @@ import { QrCodesController } from './qr-codes.controller';
       Location,
       Order,
       QrCode,
+      QrProductCategory,
+      QrProduct,
       Payment,
       Subscription,
     ]),
   ],
-  controllers: [HqController, QrCodesController],
-  providers: [HqService],
+  controllers: [HqController, QrCodesController, QrProductsController],
+  providers: [HqService, QrProductsService, QrProductsStorageService],
   exports: [HqService],
 })
 export class HqModule {}
