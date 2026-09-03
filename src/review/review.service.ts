@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI, Schema, ThinkingLevel, Type } from '@google/genai';
+import { AI_MAX_LANGUAGES } from '../ai-settings/entities/ai-settings.entity';
 import { AiSettingsService } from '../ai-settings/ai-settings.service';
 import { LocationsService } from '../locations/locations.service';
 import {
@@ -34,7 +35,7 @@ const PROMPT_BUILDERS = {
 } as const;
 type PromptVersion = keyof typeof PROMPT_BUILDERS;
 /** Share of requests that still use the original prompt. */
-const V1_PROMPT_CHANCE = 0.5;
+const V1_PROMPT_CHANCE = 0.9;
 
 /** Item count is pinned so the model cannot return fewer drafts than we asked for. */
 const RESPONSE_SCHEMA = {
@@ -108,16 +109,16 @@ export class ReviewService {
         `Skipping Gemini (${promptVersion}). Prompt would be:\n${prompt}`,
       );
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      const mockResponse = new ReviewSuggestionsResponseDto([
-        {
-          text: 'beard trim came out neat, they didnt rush it. bit of a wait though',
-          language: 'English',
-        },
-        {
-          text: 'trim kosam vella, job manchiga chestunnaru. wait konchem ekkuva kani okay',
-          language: 'Telugu',
-        },
-      ]);
+      const mockTexts = [
+        'beard trim came out neat, they didnt rush it. bit of a wait though',
+        'trim kosam vella, job manchiga chestunnaru. wait konchem ekkuva kani okay',
+      ];
+      const mockResponse = new ReviewSuggestionsResponseDto(
+        assignedLanguages.map((language, index) => ({
+          text: mockTexts[index] ?? mockTexts[0],
+          language,
+        })),
+      );
       void this.locationsService.incrementAiReviewCount(dto.locationId);
       return mockResponse;
     }
@@ -193,7 +194,7 @@ export class ReviewService {
       return ['English'];
     }
 
-    return normalized;
+    return normalized.slice(0, AI_MAX_LANGUAGES);
   }
 
   private pickWordTargets(): number[] {
@@ -206,18 +207,11 @@ export class ReviewService {
     return Math.random() < V1_PROMPT_CHANCE ? 'v1' : 'v2';
   }
 
-  /** Prefer English for extra slots so 2 langs → 2 English + 1 other. */
+  /** 1 language → every draft in that language; 2 languages → one draft each. */
   private assignLanguages(languages: string[], count: number): string[] {
-    const ordered = [...languages].sort((a, b) => {
-      const aIsEnglish = a.toLowerCase() === 'english';
-      const bIsEnglish = b.toLowerCase() === 'english';
-      if (aIsEnglish === bIsEnglish) return 0;
-      return aIsEnglish ? -1 : 1;
-    });
-
     return Array.from(
       { length: count },
-      (_, index) => ordered[index % ordered.length],
+      (_, index) => languages[index % languages.length],
     );
   }
 

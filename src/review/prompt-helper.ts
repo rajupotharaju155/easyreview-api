@@ -1,4 +1,5 @@
 import { SubmittedAnswer } from '../ai-settings/ai-settings.service';
+import { usesLatinScript } from './languages';
 
 export type ReviewPromptContext = {
   name: string;
@@ -41,15 +42,30 @@ function answerLines(ctx: ReviewPromptContext): string[] {
   );
 }
 
+function scriptSpec(language: string): string {
+  return usesLatinScript(language)
+    ? 'latinScript=true'
+    : 'latinScript=false';
+}
+
 function specLines(ctx: ReviewPromptContext): string[] {
-  return ctx.wordTargets.map(
-    (wordCount, index) =>
-      `${index + 1}. language="${ctx.assignedLanguages[index]}", targetWordCount=${wordCount}`,
-  );
+  return ctx.wordTargets.map((wordCount, index) => {
+    const language = ctx.assignedLanguages[index];
+    return `${index + 1}. language="${language}", ${scriptSpec(language)}, targetWordCount=${wordCount}`;
+  });
 }
 
 function joinPrompt(lines: Array<string | null>): string {
   return lines.filter((line) => line !== null).join('\n');
+}
+
+function scriptRules(): string[] {
+  return [
+    '- Write each draft in its assigned language, using the script that draft specifies.',
+    '- latinScript=true: write that language using Latin/English letters only (transliteration). Never use native scripts such as Telugu, Hindi, or Arabic script.',
+    '- latinScript=false: write in that language\'s own script (for example Georgian Mkhedruli). Do not romanize or transliterate the review into English letters.',
+    '- When latinScript=false, the business name is a proper noun. Keep the same name; only write those sounds in the native script. Do not translate it. Example: "Crush Mens Salon" stays Crush Mens Salon in Georgian letters — never "Krabi" or a translation of the word crush.',
+  ];
 }
 
 /** Original prompt: weave in keywords, include the listing name, cover visit details. */
@@ -92,7 +108,7 @@ export function buildV1Prompt(ctx: ReviewPromptContext): string {
     '- If the business name is in all caps, do not write it in all caps. Weave it into the sentence the way a customer would. You may use the full name, a shortened everyday name, or just the kind of place. Example: "CRUSH MENS BEAUTY PARLOUR AND SALOON" can become "Crush salon", "Crush mens salon", or just "salon".',
     '- Do not invent specific staff names, prices, or unverifiable claims.',
     '- Do not include hashtags, emojis, or quotation marks around the whole review.',
-    '- For any language that is not English, write in that language using Latin/English script only (transliteration). Never use native scripts such as Telugu, Hindi, or Arabic script.',
+    ...scriptRules(),
     '- Aim for approximately the target word count for each review (±15%).',
     '- Keep each suggestion distinct in wording.',
   ]);
@@ -157,7 +173,7 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
     '- Do not invent specific staff names, prices, or unverifiable claims.',
     '- Do not refer to staff as "guy", "the guy", "this guy", "lady", or similar placeholders. Describe the work, not a nameless person.',
     '- Do not include hashtags, emojis, or quotation marks around the whole review.',
-    '- For any language that is not English, write in that language using Latin/English script only (transliteration). Never use native scripts such as Telugu, Hindi, or Arabic script.',
+    ...scriptRules(),
     '- Aim for approximately the target word count for each review (±15%).',
     '',
     'Register to match (tone only — do not reuse these words or phrases):',
