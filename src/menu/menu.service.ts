@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -158,6 +159,11 @@ export class MenuService {
     dto: CreateCategoryDto,
   ): Promise<MenuCategoryDto> {
     await this.assertLocationOwned(locationId);
+    const name = dto.name.trim();
+    const duplicate = await this.findCategoryByName(locationId, name);
+    if (duplicate) {
+      return { ...this.toCategoryDto(duplicate), items: [] };
+    }
     const sortOrder = await this.nextSortOrder(
       this.categoryRepository,
       locationId,
@@ -165,7 +171,7 @@ export class MenuService {
     const category = await this.categoryRepository.save(
       new MenuCategory({
         locationId,
-        name: dto.name.trim(),
+        name,
         sortOrder,
         priceVariants: normalizePriceVariants(dto.priceVariants ?? []),
       }),
@@ -181,7 +187,12 @@ export class MenuService {
     await this.assertLocationOwned(locationId);
     const category = await this.requireCategory(locationId, categoryId);
     if (dto.name !== undefined) {
-      category.name = dto.name.trim();
+      const name = dto.name.trim();
+      const duplicate = await this.findCategoryByName(locationId, name);
+      if (duplicate && duplicate.id !== categoryId) {
+        throw new ConflictException('Category already exists');
+      }
+      category.name = name;
     }
     if (dto.priceVariants !== undefined) {
       const nextVariants = normalizePriceVariants(dto.priceVariants);
@@ -727,6 +738,21 @@ export class MenuService {
       throw new NotFoundException('Category not found');
     }
     return category;
+  }
+
+  private async findCategoryByName(
+    locationId: string,
+    name: string,
+  ): Promise<MenuCategory | null> {
+    const key = name.trim().toLowerCase().replace(/\s+/g, ' ');
+    const categories = await this.categoryRepository.find({
+      where: { locationId },
+    });
+    return (
+      categories.find(
+        (category) => category.name.trim().toLowerCase().replace(/\s+/g, ' ') === key,
+      ) ?? null
+    );
   }
 
   private async requireItem(
