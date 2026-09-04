@@ -29,6 +29,7 @@ import { PaymentsService } from '../payments/payments.service';
 import { Product, productDisplayName } from '../plans/enums/product.enum';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionStatus } from '../subscriptions/enums/subscription-status.enum';
+import { SubscriptionSource } from '../subscriptions/enums/subscription-source.enum';
 import {
   addDaysToIsoDate,
   todayIst,
@@ -56,7 +57,9 @@ import {
   LOGIN_AS_TICKET_EXPIRATION,
   LOGIN_AS_TOKEN_TYPE,
   QR_BATCH_DEFAULT_SIZE,
+  SUBSCRIPTION_DURATION_BUCKETS,
   type AttentionQueueKey,
+  type SubscriptionQueueKey,
 } from './hq.constants';
 import {
   generateQrCodeValue,
@@ -78,6 +81,25 @@ const OPEN_ORDER_STATUSES = [
 ];
 
 export type HqAttentionCounts = Record<AttentionQueueKey, number>;
+
+export type HqSubscriptionQueueCounts = Record<SubscriptionQueueKey, number>;
+
+export type HqSubscriptionQueueItem = {
+  id: string;
+  locationId: string;
+  locationName: string | null;
+  locationCity: string | null;
+  locationDeleted: boolean;
+  product: Product;
+  planName: string | null;
+  planDurationDays: number | null;
+  amount: number;
+  currency: string;
+  status: SubscriptionStatus;
+  source: SubscriptionSource;
+  startDate: string | null;
+  endDate: string | null;
+};
 
 export type HqAttentionLocation = {
   id: string;
@@ -282,6 +304,65 @@ export class HqService {
     );
   }
 
+  /**
+   * Subscriptions page tab counts: paid live annual / 6-month / monthly /
+   * 7-day plans, complimentary live subscriptions, and overdue rows.
+   */
+  async getSubscriptionQueues(): Promise<HqSubscriptionQueueCounts> {
+    const today = todayIst();
+    const [annual, sixMonths, monthly, sevenDays, free, overdue] =
+      await Promise.all([
+        this.activeByDurationQb(today, 'annual').getCount(),
+        this.activeByDurationQb(today, 'sixMonths').getCount(),
+        this.activeByDurationQb(today, 'monthly').getCount(),
+        this.activeByDurationQb(today, 'sevenDays').getCount(),
+        this.freeActiveQb(today).getCount(),
+        this.overdueQb(today).getCount(),
+      ]);
+
+    return { annual, sixMonths, monthly, sevenDays, free, overdue };
+  }
+
+  /**
+   * Paginated rows for a single HQ subscriptions page tab.
+   */
+  async getSubscriptionQueue(
+    queue: SubscriptionQueueKey,
+    query: PaginationDto,
+  ): Promise<PaginatedResponseDto<HqSubscriptionQueueItem>> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const today = todayIst();
+
+    const qb =
+      queue === 'overdue'
+        ? this.overdueQb(today)
+        : queue === 'free'
+          ? this.freeActiveQb(today)
+          : this.activeByDurationQb(today, queue);
+
+    const [subscriptions, total] = await Promise.all([
+      qb.clone().skip(skip).take(limit).getMany(),
+      qb.clone().getCount(),
+    ]);
+    const amounts = await this.chargedAmountsBySubscriptionId(
+      subscriptions.map((subscription) => subscription.id),
+    );
+
+    return new PaginatedResponseDto(
+      subscriptions.map((subscription) =>
+        this.toSubscriptionQueueItem(
+          subscription,
+          amounts.get(subscription.id),
+        ),
+      ),
+      total,
+      page,
+      limit,
+    );
+  }
+
   private getAttentionDates() {
     const today = todayIst();
     return {
@@ -330,8 +411,9 @@ export class HqService {
   private overdueQb(today: string) {
     return this.subscriptionRepository
       .createQueryBuilder('subscription')
+      .withDeleted()
       .innerJoinAndSelect('subscription.plan', 'plan')
-      .innerJoinAndSelect('subscription.location', 'location')
+      .leftJoinAndSelect('subscription.location', 'location')
       .leftJoin(
         Subscription,
         'liveSub',
@@ -346,7 +428,79 @@ export class HqService {
           SubscriptionStatus.EXPIRED,
         ],
       })
-      .orderBy('subscription.endDate', 'DESC');
+      .orderBy('subscription.createdAt', 'DESC');
+  }
+
+  private activeByDurationQb(
+    today: string,
+    bucket: keyof typeof SUBSCRIPTION_DURATION_BUCKETS,
+  ) {
+    const { minDays, maxDaysExclusive } = SUBSCRIPTION_DURATION_BUCKETS[bucket];
+    const qb = this.subscriptionRepository
+      .createQueryBuilder('subscription')
+      .withDeleted()
+      .innerJoinAndSelect('subscription.plan', 'plan')
+      .leftJoinAndSelect('subscription.location', 'location')
+      .where('subscription.status = :status', {
+        status: SubscriptionStatus.ACTIVE,
+      })
+      .andWhere('subscription.endDate >= :today', { today })
+      .andWhere('plan.durationDays >= :minDays', { minDays });
+
+    if (maxDaysExclusive != null) {
+      qb.andWhere('plan.durationDays < :maxDaysExclusive', {
+        maxDaysExclusive,
+      });
+    }
+
+    return this.wherePaidSuccessPayment(qb).orderBy(
+      'subscription.createdAt',
+      'DESC',
+    );
+  }
+
+  /** Live subscriptions whose charged payment is 0 after discount. */
+  private freeActiveQb(today: string) {
+    const qb = this.subscriptionRepository
+      .createQueryBuilder('subscription')
+      .withDeleted()
+      .innerJoinAndSelect('subscription.plan', 'plan')
+      .leftJoinAndSelect('subscription.location', 'location')
+      .where('subscription.status = :status', {
+        status: SubscriptionStatus.ACTIVE,
+      })
+      .andWhere('subscription.endDate >= :today', { today });
+
+    return this.whereFreeSuccessPayment(qb).orderBy(
+      'subscription.createdAt',
+      'DESC',
+    );
+  }
+
+  /** Charged amount is stored on payments.amount after discount. */
+  private wherePaidSuccessPayment(
+    qb: ReturnType<Repository<Subscription>['createQueryBuilder']>,
+  ) {
+    return qb.andWhere(this.paidSuccessPaymentExistsSql(), {
+      paidSuccessStatus: PaymentStatus.SUCCESS,
+    });
+  }
+
+  private whereFreeSuccessPayment(
+    qb: ReturnType<Repository<Subscription>['createQueryBuilder']>,
+  ) {
+    return qb.andWhere(`NOT ${this.paidSuccessPaymentExistsSql()}`, {
+      paidSuccessStatus: PaymentStatus.SUCCESS,
+    });
+  }
+
+  private paidSuccessPaymentExistsSql(): string {
+    return `EXISTS (
+      SELECT 1 FROM payments paid_payment
+      WHERE paid_payment."subscriptionId" = subscription.id
+        AND paid_payment.status = :paidSuccessStatus
+        AND paid_payment.amount > 0
+    )`;
   }
 
   private toIso(value: Date | string): string {
@@ -376,6 +530,57 @@ export class HqService {
       startDate: subscription.startDate,
       endDate: subscription.endDate,
     };
+  }
+
+  private toSubscriptionQueueItem(
+    subscription: Subscription,
+    charged?: { amount: number; currency: string },
+  ): HqSubscriptionQueueItem {
+    return {
+      id: subscription.id,
+      locationId: subscription.locationId,
+      locationName: subscription.location?.name ?? null,
+      locationCity: subscription.location?.city ?? null,
+      locationDeleted:
+        !subscription.location || Boolean(subscription.location.deletedAt),
+      product: subscription.product,
+      planName: subscription.plan?.name ?? null,
+      planDurationDays: subscription.plan?.durationDays ?? null,
+      amount: charged?.amount ?? 0,
+      currency: charged?.currency ?? subscription.plan?.currency ?? 'INR',
+      status: subscription.status,
+      source: subscription.source,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+    };
+  }
+
+  /** Latest successful charged amount (already after discount). */
+  private async chargedAmountsBySubscriptionId(
+    subscriptionIds: string[],
+  ): Promise<Map<string, { amount: number; currency: string }>> {
+    const amounts = new Map<string, { amount: number; currency: string }>();
+    if (subscriptionIds.length === 0) return amounts;
+
+    const payments = await this.paymentRepository.find({
+      where: {
+        subscriptionId: In(subscriptionIds),
+        status: PaymentStatus.SUCCESS,
+      },
+      select: ['subscriptionId', 'amount', 'currency', 'succeededAt'],
+      order: { succeededAt: 'DESC' },
+    });
+
+    for (const payment of payments) {
+      if (!payment.subscriptionId || amounts.has(payment.subscriptionId)) {
+        continue;
+      }
+      amounts.set(payment.subscriptionId, {
+        amount: payment.amount,
+        currency: payment.currency,
+      });
+    }
+    return amounts;
   }
 
   private toAttentionPayment(payment: Payment): HqAttentionPayment {
@@ -503,7 +708,10 @@ export class HqService {
    * Returns a single location by id for HQ detail view.
    */
   async findLocationById(id: string): Promise<Location> {
-    const location = await this.locationRepository.findOne({ where: { id } });
+    const location = await this.locationRepository.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!location) {
       throw new NotFoundException(`Location with id "${id}" not found`);
     }

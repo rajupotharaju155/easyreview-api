@@ -162,63 +162,81 @@ export class PaymentsService {
 
   async findSummaryForHq(): Promise<HqPaymentSummaryDto> {
     const { thisMonth, lastMonth } = istThisAndLastMonth();
-    const raw = await this.paymentRepository
-      .createQueryBuilder('payment')
-      .select(
-        `COALESCE(SUM(CASE WHEN payment.status = :success THEN payment.amount ELSE 0 END), 0)`,
-        'lifetimeAmount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN payment.status = :success THEN 1 END)`,
-        'lifetimeCount',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :thisStart AND payment.succeededAt < :thisEnd THEN payment.amount ELSE 0 END), 0)`,
-        'thisMonthAmount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN payment.status = :success AND payment.succeededAt >= :thisStart AND payment.succeededAt < :thisEnd THEN 1 END)`,
-        'thisMonthCount',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :lastStart AND payment.succeededAt < :lastEnd THEN payment.amount ELSE 0 END), 0)`,
-        'lastMonthAmount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN payment.status = :success AND payment.succeededAt >= :lastStart AND payment.succeededAt < :lastEnd THEN 1 END)`,
-        'lastMonthCount',
-      )
-      .setParameters({
-        success: PaymentStatus.SUCCESS,
-        thisStart: thisMonth.startUtc,
-        thisEnd: thisMonth.endExclusiveUtc,
-        lastStart: lastMonth.startUtc,
-        lastEnd: lastMonth.endExclusiveUtc,
-      })
-      .getRawOne<{
-        lifetimeAmount: string | number;
-        lifetimeCount: string | number;
-        thisMonthAmount: string | number;
-        thisMonthCount: string | number;
-        lastMonthAmount: string | number;
-        lastMonthCount: string | number;
-      }>();
+    const periodParams = {
+      thisStart: thisMonth.startUtc,
+      thisEnd: thisMonth.endExclusiveUtc,
+      lastStart: lastMonth.startUtc,
+      lastEnd: lastMonth.endExclusiveUtc,
+    };
+    const [raw, subscriptionRaw] = await Promise.all([
+      this.paymentRepository
+        .createQueryBuilder('payment')
+        .select(
+          `COALESCE(SUM(CASE WHEN payment.status = :success THEN payment.amount ELSE 0 END), 0)`,
+          'lifetimeAmount',
+        )
+        .addSelect(
+          `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :thisStart AND payment.succeededAt < :thisEnd THEN payment.amount ELSE 0 END), 0)`,
+          'thisMonthAmount',
+        )
+        .addSelect(
+          `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :lastStart AND payment.succeededAt < :lastEnd THEN payment.amount ELSE 0 END), 0)`,
+          'lastMonthAmount',
+        )
+        .setParameters({
+          success: PaymentStatus.SUCCESS,
+          ...periodParams,
+        })
+        .getRawOne<{
+          lifetimeAmount: string | number;
+          thisMonthAmount: string | number;
+          lastMonthAmount: string | number;
+        }>(),
+      this.subscriptionRepository
+        .createQueryBuilder('subscription')
+        .where(
+          `EXISTS (
+            SELECT 1 FROM payments paid
+            WHERE paid."subscriptionId" = subscription.id
+              AND paid.status = :success
+              AND paid.amount > 0
+          )`,
+        )
+        .select('COUNT(*)', 'lifetimeCount')
+        .addSelect(
+          `COUNT(CASE WHEN subscription.createdAt >= :thisStart AND subscription.createdAt < :thisEnd THEN 1 END)`,
+          'thisMonthCount',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN subscription.createdAt >= :lastStart AND subscription.createdAt < :lastEnd THEN 1 END)`,
+          'lastMonthCount',
+        )
+        .setParameters({
+          success: PaymentStatus.SUCCESS,
+          ...periodParams,
+        })
+        .getRawOne<{
+          lifetimeCount: string | number;
+          thisMonthCount: string | number;
+          lastMonthCount: string | number;
+        }>(),
+    ]);
 
     return new HqPaymentSummaryDto({
       currency: 'INR',
       lifetime: {
         amount: toCount(raw?.lifetimeAmount),
-        count: toCount(raw?.lifetimeCount),
+        subscriptionCount: toCount(subscriptionRaw?.lifetimeCount),
       },
       thisMonth: {
         amount: toCount(raw?.thisMonthAmount),
-        count: toCount(raw?.thisMonthCount),
+        subscriptionCount: toCount(subscriptionRaw?.thisMonthCount),
         from: thisMonth.from,
         to: thisMonth.to,
       },
       lastMonth: {
         amount: toCount(raw?.lastMonthAmount),
-        count: toCount(raw?.lastMonthCount),
+        subscriptionCount: toCount(subscriptionRaw?.lastMonthCount),
         from: lastMonth.from,
         to: lastMonth.to,
       },
