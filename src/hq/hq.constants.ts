@@ -34,6 +34,29 @@ export type AttentionQueueKey = (typeof ATTENTION_QUEUE_KEYS)[number];
 /** Active subscriptions ending within this many days (inclusive). */
 export const ATTENTION_ENDING_SOON_DAYS = 14;
 
+/** HQ subscriptions page queues, grouped by plan duration plus overdue. */
+export const SUBSCRIPTION_QUEUE_KEYS = [
+  'annual',
+  'sixMonths',
+  'monthly',
+  'sevenDays',
+  'free',
+  'overdue',
+] as const;
+
+export type SubscriptionQueueKey = (typeof SUBSCRIPTION_QUEUE_KEYS)[number];
+
+/**
+ * Contiguous plan.durationDays ranges so every live paid subscription lands
+ * in exactly one duration tab. Matches seeded 7 / 30 / 180 / 365 day plans.
+ */
+export const SUBSCRIPTION_DURATION_BUCKETS = {
+  sevenDays: { minDays: 0, maxDaysExclusive: 14 },
+  monthly: { minDays: 14, maxDaysExclusive: 90 },
+  sixMonths: { minDays: 90, maxDaysExclusive: 300 },
+  annual: { minDays: 300, maxDaysExclusive: null },
+} as const;
+
 /**
  * Ambiguous chars excluded (0/O, 1/I/L) so standee labels stay easy to type.
  * Length balances guessability vs scan URL size.

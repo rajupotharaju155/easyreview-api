@@ -1,6 +1,6 @@
 export type HqPaymentSummaryBucketDto = {
   amount: number;
-  count: number;
+  subscriptionCount: number;
   from?: string;
   to?: string;
 };

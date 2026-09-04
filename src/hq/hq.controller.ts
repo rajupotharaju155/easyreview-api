@@ -22,6 +22,7 @@ import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { HqAssignQrCodeDto } from './dto/hq-assign-qr-code.dto';
 import { HqAttentionQueueParamDto } from './dto/hq-attention-queue-param.dto';
+import { HqSubscriptionQueueParamDto } from './dto/hq-subscription-queue-param.dto';
 import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
@@ -42,6 +43,8 @@ import {
   type HqAttentionCounts,
   type HqAttentionItem,
   type HqQrBatchResult,
+  type HqSubscriptionQueueCounts,
+  type HqSubscriptionQueueItem,
 } from './hq.service';
 
 @Controller('hq')
@@ -68,6 +71,21 @@ export class HqController {
     @Query() query: PaginationDto,
   ): Promise<PaginatedResponseDto<HqAttentionItem>> {
     return this.hqService.getAttentionQueue(params.queue, query);
+  }
+
+  @UseGuards(HqGuard)
+  @Get('subscription-queues')
+  async getSubscriptionQueues(): Promise<HqSubscriptionQueueCounts> {
+    return this.hqService.getSubscriptionQueues();
+  }
+
+  @UseGuards(HqGuard)
+  @Get('subscription-queues/:queue')
+  async getSubscriptionQueue(
+    @Param() params: HqSubscriptionQueueParamDto,
+    @Query() query: PaginationDto,
+  ): Promise<PaginatedResponseDto<HqSubscriptionQueueItem>> {
+    return this.hqService.getSubscriptionQueue(params.queue, query);
   }
 
   @UseGuards(HqGuard)
