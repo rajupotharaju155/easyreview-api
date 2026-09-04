@@ -14,6 +14,7 @@ import { HqService } from './hq.service';
 import { QrCodesController } from './qr-codes.controller';
 import { QrProductCategory } from './qr-products/entities/qr-product-category.entity';
 import { QrProduct } from './qr-products/entities/qr-product.entity';
+import { QrProductsCatalogController } from './qr-products/qr-products-catalog.controller';
 import { QrProductsController } from './qr-products/qr-products.controller';
 import { QrProductsService } from './qr-products/qr-products.service';
 import { QrProductsStorageService } from './qr-products/qr-products-storage.service';
@@ -34,8 +35,13 @@ import { QrProductsStorageService } from './qr-products/qr-products-storage.serv
       Subscription,
     ]),
   ],
-  controllers: [HqController, QrCodesController, QrProductsController],
+  controllers: [
+    HqController,
+    QrCodesController,
+    QrProductsController,
+    QrProductsCatalogController,
+  ],
   providers: [HqService, QrProductsService, QrProductsStorageService],
-  exports: [HqService],
+  exports: [HqService, QrProductsService],
 })
 export class HqModule {}

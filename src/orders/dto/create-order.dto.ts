@@ -6,12 +6,12 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
 import { DeliveryTo } from '../enums/delivery-to.enum';
-import { DesignVariant } from '../enums/design-variant.enum';
 
 function emptyToUndefined({ value }: { value: unknown }): unknown {
   if (typeof value !== 'string') return value;
@@ -24,8 +24,10 @@ export class CreateOrderDto {
   @MinLength(1)
   locationId: string;
 
-  @IsEnum(DesignVariant)
-  designVariant: DesignVariant;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(16)
+  productId: string;
 
   @IsOptional()
   @Type(() => Number)

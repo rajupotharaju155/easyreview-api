@@ -10,10 +10,10 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
+import { QrProduct } from '../../hq/qr-products/entities/qr-product.entity';
 import { Location } from '../../locations/entities/location.entity';
 import { User } from '../../users/entities/user.entity';
 import { DeliveryTo } from '../enums/delivery-to.enum';
-import { DesignVariant } from '../enums/design-variant.enum';
 import { OrderStatus } from '../enums/order-status.enum';
 
 @Entity('orders')
@@ -41,8 +41,13 @@ export class Order {
   @JoinColumn({ name: 'locationId' })
   location: Location;
 
-  @Column({ type: 'varchar', length: 32 })
-  designVariant: DesignVariant;
+  @Index()
+  @Column({ type: 'varchar', length: ID_LENGTH, nullable: true })
+  productId: string | null;
+
+  @ManyToOne(() => QrProduct, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'productId' })
+  product?: QrProduct | null;
 
   @Column({ type: 'varchar', length: 120 })
   designName: string;

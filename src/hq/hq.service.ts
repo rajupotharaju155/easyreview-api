@@ -19,9 +19,7 @@ import { generateHqTokens } from '../common/utils/token.util';
 import { Location } from '../locations/entities/location.entity';
 import { LocationMetric } from '../locations/entities/location-metric.entity';
 import { LocationsService } from '../locations/locations.service';
-import { STANDEE_DESIGNS } from '../orders/constants/standee.constants';
 import { Order } from '../orders/entities/order.entity';
-import { DesignVariant } from '../orders/enums/design-variant.enum';
 import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
@@ -51,6 +49,7 @@ import { HqUsersQueryDto } from './dto/hq-users-query.dto';
 import { TransferLocationDto } from './dto/transfer-location.dto';
 import { QrCode } from './entities/qr-code.entity';
 import { PublicQrCodeDto } from './dto/public-qr-code.dto';
+import { QrProductsService } from './qr-products/qr-products.service';
 import {
   ATTENTION_ENDING_SOON_DAYS,
   HQ_ADMINS,
@@ -151,6 +150,7 @@ export class HqService {
     private readonly configService: ConfigService,
     private readonly locationsService: LocationsService,
     private readonly paymentsService: PaymentsService,
+    private readonly qrProductsService: QrProductsService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Location)
@@ -870,9 +870,17 @@ export class HqService {
    */
   async updateOrder(id: string, dto: HqUpdateOrderDto): Promise<Order> {
     const order = await this.findOrderById(id);
-    if (dto.designVariant) {
-      order.designVariant = dto.designVariant;
-      order.designName = STANDEE_DESIGNS[dto.designVariant].name;
+    if (dto.productId) {
+      const product = await this.qrProductsService.findActiveProduct(
+        dto.productId,
+      );
+      if (!product) {
+        throw new NotFoundException(
+          `Product with id "${dto.productId}" not found`,
+        );
+      }
+      order.productId = product.id;
+      order.designName = product.name;
     }
     order.phoneNumber = dto.phoneNumber.trim();
     order.addressLine1 = dto.addressLine1?.trim() || null;
@@ -886,7 +894,7 @@ export class HqService {
       where: { orderId: order.id },
       order: { createdAt: 'DESC' },
     });
-    const listAmount = this.resolveOrderListAmount(order, payment);
+    const listAmount = await this.resolveOrderListAmount(order, payment);
     if (dto.discountAmount !== undefined) {
       if (dto.discountAmount > listAmount) {
         throw new BadRequestException(
@@ -923,13 +931,15 @@ export class HqService {
     return order;
   }
 
-  private resolveOrderListAmount(
+  private async resolveOrderListAmount(
     order: Order,
     payment: Payment | null,
-  ): number {
-    const catalog = STANDEE_DESIGNS[order.designVariant as DesignVariant];
-    if (catalog) {
-      return catalog.priceInr * order.quantity;
+  ): Promise<number> {
+    if (order.productId) {
+      const product = await this.qrProductsService.findProduct(order.productId);
+      if (product) {
+        return product.priceInr * order.quantity;
+      }
     }
     if (payment) {
       return payment.amount + payment.discountAmount;

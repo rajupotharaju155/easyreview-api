@@ -83,9 +83,8 @@ export class QrProductsController {
   }
 
   @Delete('products/:productId')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  deleteProduct(@Param('productId') productId: string) {
-    return this.qrProductsService.deleteProduct(productId);
+  discontinueProduct(@Param('productId') productId: string) {
+    return this.qrProductsService.discontinueProduct(productId);
   }
 
   @Post('images')

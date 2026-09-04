@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -48,5 +49,9 @@ export class UpdateQrProductDto {
   @ArrayMaxSize(3)
   @IsString({ each: true })
   imageUrls?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  discontinued?: boolean;
 }
 

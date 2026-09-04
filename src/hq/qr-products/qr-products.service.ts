@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { QrProductsStorageService } from './qr-products-storage.service';
 import { QrProduct } from './entities/qr-product.entity';
 import { QrProductCategory } from './entities/qr-product-category.entity';
@@ -23,6 +23,24 @@ export type QrProductDto = QrProduct & {
 
 export type QrProductCategoryDto = QrProductCategory;
 
+export type QrProductCatalogItem = {
+  id: string;
+  categoryId: string;
+  name: string;
+  description: string | null;
+  dimensions: string | null;
+  priceInr: number;
+  imageUrls: string[];
+  sortOrder: number;
+};
+
+export type QrProductCatalogCategory = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  products: QrProductCatalogItem[];
+};
+
 @Injectable()
 export class QrProductsService {
   constructor(
@@ -37,6 +55,42 @@ export class QrProductsService {
     return this.categoryRepository.find({
       order: { sortOrder: 'ASC', createdAt: 'DESC' },
     });
+  }
+
+  async listCatalog(): Promise<QrProductCatalogCategory[]> {
+    const [categories, products] = await Promise.all([
+      this.listCategories(),
+      this.productRepository.find({
+        where: { discontinuedAt: IsNull() },
+        order: { sortOrder: 'ASC', createdAt: 'ASC' },
+      }),
+    ]);
+
+    const productsByCategory = new Map<string, QrProductCatalogItem[]>();
+    for (const product of products) {
+      const list = productsByCategory.get(product.categoryId) ?? [];
+      list.push(this.toCatalogItem(product));
+      productsByCategory.set(product.categoryId, list);
+    }
+
+    return categories
+      .map((category) => ({
+        id: category.id,
+        name: category.name,
+        sortOrder: category.sortOrder,
+        products: productsByCategory.get(category.id) ?? [],
+      }))
+      .filter((category) => category.products.length > 0);
+  }
+
+  async findActiveProduct(productId: string): Promise<QrProduct | null> {
+    return this.productRepository.findOne({
+      where: { id: productId, discontinuedAt: IsNull() },
+    });
+  }
+
+  async findProduct(productId: string): Promise<QrProduct | null> {
+    return this.productRepository.findOne({ where: { id: productId } });
   }
 
   async createCategory(dto: CreateQrProductCategoryDto): Promise<QrProductCategoryDto> {
@@ -81,17 +135,16 @@ export class QrProductsService {
   async deleteCategory(categoryId: string): Promise<void> {
     await this.requireCategory(categoryId);
 
-    const products = await this.productRepository.find({
+    const productCount = await this.productRepository.count({
       where: { categoryId },
-      select: ['id', 'imageUrls'],
     });
+    if (productCount > 0) {
+      throw new BadRequestException(
+        'Remove this category only after it has no products. Discontinue products instead of deleting them.',
+      );
+    }
 
-    const uniqueImageUrls = [...new Set(products.flatMap((p) => p.imageUrls))];
-
-    await this.productRepository.softDelete({ categoryId });
     await this.categoryRepository.softDelete({ id: categoryId });
-
-    await this.deleteManagedImagesIfUnused(uniqueImageUrls);
   }
 
   async listProducts(categoryId: string): Promise<QrProductDto[]> {
@@ -154,6 +207,12 @@ export class QrProductsService {
       product.imageUrls = nextImageUrls;
     }
 
+    if (dto.discontinued !== undefined) {
+      product.discontinuedAt = dto.discontinued
+        ? (product.discontinuedAt ?? new Date())
+        : null;
+    }
+
     const saved = await this.productRepository.save(product);
 
     const nextImageUrls = saved.imageUrls ?? [];
@@ -191,11 +250,13 @@ export class QrProductsService {
     );
   }
 
-  async deleteProduct(productId: string): Promise<void> {
+  async discontinueProduct(productId: string): Promise<QrProductDto> {
     const product = await this.requireProduct(productId);
-    const imageUrls = product.imageUrls ?? [];
-    await this.productRepository.softDelete({ id: productId });
-    await this.deleteManagedImagesIfUnused(imageUrls);
+    if (!product.discontinuedAt) {
+      product.discontinuedAt = new Date();
+      await this.productRepository.save(product);
+    }
+    return product;
   }
 
   async uploadImage(file: Parameters<QrProductsStorageService['uploadImage']>[0]) {
@@ -250,6 +311,19 @@ export class QrProductsService {
         throw new BadRequestException('Image URL is too long');
       }
     }
+  }
+
+  private toCatalogItem(product: QrProduct): QrProductCatalogItem {
+    return {
+      id: product.id,
+      categoryId: product.categoryId,
+      name: product.name,
+      description: product.description,
+      dimensions: product.dimensions,
+      priceInr: product.priceInr,
+      imageUrls: product.imageUrls ?? [],
+      sortOrder: product.sortOrder,
+    };
   }
 
   private async deleteManagedImagesIfUnused(imageUrls: string[]): Promise<void> {

@@ -12,8 +12,8 @@ import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { EmailService } from '../email/email.service';
 import type { OrderConfirmationEmailDetails } from '../email/templates/email.templates';
 import { Location } from '../locations/entities/location.entity';
+import { QrProductsService } from '../hq/qr-products/qr-products.service';
 import { PaymentsService } from '../payments/payments.service';
-import { STANDEE_DESIGNS } from './constants/standee.constants';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order } from './entities/order.entity';
 import { DeliveryTo } from './enums/delivery-to.enum';
@@ -51,6 +51,7 @@ export class OrdersService {
     private readonly currentUserUtil: CurrentUserUtil,
     private readonly emailService: EmailService,
     private readonly paymentsService: PaymentsService,
+    private readonly qrProductsService: QrProductsService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
@@ -63,7 +64,14 @@ export class OrdersService {
         `Location with id "${createOrderDto.locationId}" not found`,
       );
     }
-    const design = STANDEE_DESIGNS[createOrderDto.designVariant];
+    const product = await this.qrProductsService.findActiveProduct(
+      createOrderDto.productId,
+    );
+    if (!product) {
+      throw new NotFoundException(
+        `Product with id "${createOrderDto.productId}" not found`,
+      );
+    }
     const quantity = createOrderDto.quantity ?? 1;
     const deliveryAddress = this.resolveDeliveryAddress(
       createOrderDto,
@@ -72,9 +80,9 @@ export class OrdersService {
     const order = this.orderRepository.create({
       userId: user.id,
       locationId: location.id,
-      designVariant: createOrderDto.designVariant,
-      designName: design.name,
-      amountInr: design.priceInr * quantity,
+      productId: product.id,
+      designName: product.name,
+      amountInr: product.priceInr * quantity,
       quantity,
       businessNameSnapshot: location.name,
       deliveryTo: createOrderDto.deliveryTo,

@@ -2,7 +2,6 @@ import {
   BeforeInsert,
   Column,
   CreateDateColumn,
-  DeleteDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -27,7 +26,7 @@ export class QrProduct {
   @Column({ type: 'varchar', length: ID_LENGTH })
   categoryId: string;
 
-  @ManyToOne(() => QrProductCategory, { onDelete: 'CASCADE' })
+  @ManyToOne(() => QrProductCategory, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'categoryId' })
   category: QrProductCategory;
 
@@ -55,8 +54,8 @@ export class QrProduct {
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  @DeleteDateColumn({ type: 'timestamptz' })
-  deletedAt: Date | null;
+  @Column({ type: 'timestamptz', nullable: true })
+  discontinuedAt: Date | null;
 
   @BeforeInsert()
   setId() {
