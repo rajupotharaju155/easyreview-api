@@ -10,7 +10,6 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { DesignVariant } from '../../orders/enums/design-variant.enum';
 import { OrderStatus } from '../../orders/enums/order-status.enum';
 
 function emptyToNull({ value }: { value: unknown }): unknown {
@@ -21,11 +20,13 @@ function emptyToNull({ value }: { value: unknown }): unknown {
 }
 
 export class HqUpdateOrderDto {
-  // Omit to keep the order on its current design. Orders placed on a retired
-  // design keep a variant that is no longer in the enum, and must stay editable.
+  // Omit to keep the order on its current product. Legacy orders without a
+  // catalog productId must stay editable.
   @IsOptional()
-  @IsEnum(DesignVariant)
-  designVariant?: DesignVariant;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(16)
+  productId?: string;
 
   @IsString()
   @Matches(/^[6-9]\d{9}$/, {
