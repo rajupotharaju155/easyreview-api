@@ -24,6 +24,7 @@ import { HqAssignQrCodeDto } from './dto/hq-assign-qr-code.dto';
 import { HqAttentionQueueParamDto } from './dto/hq-attention-queue-param.dto';
 import { HqSubscriptionQueueParamDto } from './dto/hq-subscription-queue-param.dto';
 import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
+import { HqDeleteLocationQueryDto } from './dto/hq-delete-location-query.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
 import { HqQrCodesQueryDto } from './dto/hq-qr-codes-query.dto';
@@ -142,8 +143,11 @@ export class HqController {
 
   @UseGuards(HqGuard)
   @Delete('locations/:id')
-  async deleteLocation(@Param('id') id: string): Promise<Location> {
-    return this.hqService.deleteLocation(id);
+  async deleteLocation(
+    @Param('id') id: string,
+    @Query() query: HqDeleteLocationQueryDto,
+  ): Promise<Location> {
+    return this.hqService.deleteLocation(id, query.deleteSubscriptions === true);
   }
 
   @UseGuards(HqGuard)
