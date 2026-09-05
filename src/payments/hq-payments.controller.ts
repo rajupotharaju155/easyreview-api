@@ -14,6 +14,8 @@ import {
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { HqGuard } from '../hq/guards/hq.guard';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { HqNetSeriesDto } from './dto/hq-net-series.dto';
+import { HqNetSeriesQueryDto } from './dto/hq-net-series-query.dto';
 import { HqPaymentSummaryDto } from './dto/hq-payment-summary.dto';
 import { HqPaymentsQueryDto } from './dto/hq-payments-query.dto';
 import { MarkPaymentSuccessDto } from './dto/mark-payment-success.dto';
@@ -36,6 +38,11 @@ export class HqPaymentsController {
   @Get('summary')
   summary(): Promise<HqPaymentSummaryDto> {
     return this.paymentsService.findSummaryForHq();
+  }
+
+  @Get('net-series')
+  netSeries(@Query() query: HqNetSeriesQueryDto): Promise<HqNetSeriesDto> {
+    return this.paymentsService.findNetSeriesForHq(query.range);
   }
 
   @Get(':id')

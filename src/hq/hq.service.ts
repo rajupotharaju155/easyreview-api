@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, In, Not, Repository } from 'typeorm';
+import { ILike, In, IsNull, Not, Repository } from 'typeorm';
 import { LoginResponseDto } from '../auth/dto/auth-response.dto';
 import { LoginDto } from '../auth/dto/login.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
@@ -46,6 +46,7 @@ import { HqUpdateQrPrintedDto } from './dto/hq-update-qr-printed.dto';
 import { HqUpdateUserDto } from './dto/hq-update-user.dto';
 import { LoginAsTicketResponseDto } from './dto/login-as-ticket-response.dto';
 import { HqUsersQueryDto } from './dto/hq-users-query.dto';
+import { HqDeletedFilter } from './enums/hq-deleted-filter.enum';
 import { TransferLocationDto } from './dto/transfer-location.dto';
 import { QrCode } from './entities/qr-code.entity';
 import { PublicQrCodeDto } from './dto/public-qr-code.dto';
@@ -608,22 +609,33 @@ export class HqService {
   }
 
   /**
-   * Lists all users globally; search matches id or email.
+   * Lists users globally; search matches id or email.
+   * Defaults to active (non-deleted) users.
    */
   async findUsers(
     query: HqUsersQueryDto,
   ): Promise<PaginatedResponseDto<User>> {
-    const { page = 1, limit = 10, search } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      deleted = HqDeletedFilter.ACTIVE,
+    } = query;
     const skip = (page - 1) * limit;
     const term = search?.trim();
+    const { withDeleted, deletedWhere } = deletedListOptions(deleted);
     const where = term
-      ? [{ id: ILike(`%${term}%`) }, { email: ILike(`%${term}%`) }]
-      : {};
+      ? [
+          { id: ILike(`%${term}%`), ...deletedWhere },
+          { email: ILike(`%${term}%`), ...deletedWhere },
+        ]
+      : deletedWhere;
     const [data, total] = await this.userRepository.findAndCount({
       where,
       order: { createdAt: 'DESC' },
       skip,
       take: limit,
+      withDeleted,
     });
     return new PaginatedResponseDto(data, total, page, limit);
   }
@@ -632,7 +644,10 @@ export class HqService {
    * Returns a single user by id for HQ detail view.
    */
   async findUserById(id: string): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id } });
+    const user = await this.userRepository.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!user) {
       throw new NotFoundException(`User with id "${id}" not found`);
     }
@@ -677,29 +692,38 @@ export class HqService {
   }
 
   /**
-   * Lists all locations globally; search matches id, placeId, or name.
+   * Lists locations globally; search matches id, placeId, or name.
    * Optional userId filters to locations managed by that agency user.
+   * Defaults to active (non-deleted) locations.
    */
   async findLocations(
     query: HqLocationsQueryDto,
   ): Promise<PaginatedResponseDto<Location>> {
-    const { page = 1, limit = 10, search, userId } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      userId,
+      deleted = HqDeletedFilter.ACTIVE,
+    } = query;
     const skip = (page - 1) * limit;
     const term = search?.trim();
     const ownerId = userId?.trim();
+    const { withDeleted, deletedWhere } = deletedListOptions(deleted);
     const ownerFilter = ownerId ? { userId: ownerId } : {};
     const where = term
       ? [
-          { id: ILike(`%${term}%`), ...ownerFilter },
-          { placeId: ILike(`%${term}%`), ...ownerFilter },
-          { name: ILike(`%${term}%`), ...ownerFilter },
+          { id: ILike(`%${term}%`), ...ownerFilter, ...deletedWhere },
+          { placeId: ILike(`%${term}%`), ...ownerFilter, ...deletedWhere },
+          { name: ILike(`%${term}%`), ...ownerFilter, ...deletedWhere },
         ]
-      : ownerFilter;
+      : { ...ownerFilter, ...deletedWhere };
     const [data, total] = await this.locationRepository.findAndCount({
       where,
       order: { createdAt: 'DESC' },
       skip,
       take: limit,
+      withDeleted,
     });
     return new PaginatedResponseDto(data, total, page, limit);
   }
@@ -719,11 +743,30 @@ export class HqService {
   }
 
   /**
-   * Soft-deletes a location from HQ.
+   * Soft-deletes a location from HQ. Optionally hard-deletes its subscriptions
+   * (and their related payments via FK cascade).
    */
-  async deleteLocation(id: string): Promise<Location> {
+  async deleteLocation(
+    id: string,
+    deleteSubscriptions = false,
+  ): Promise<Location> {
     const location = await this.findLocationById(id);
-    await this.locationRepository.softDelete(id);
+    await this.locationRepository.manager.transaction(async (manager) => {
+      if (deleteSubscriptions) {
+        const subscriptions = await manager.find(Subscription, {
+          where: { locationId: id },
+          select: ['id', 'product'],
+        });
+        if (subscriptions.length > 0) {
+          await manager.delete(Subscription, { locationId: id });
+          if (subscriptions.some((item) => item.product === Product.EASY_MENU)) {
+            location.isEasyMenuEnabled = false;
+            await manager.update(Location, id, { isEasyMenuEnabled: false });
+          }
+        }
+      }
+      await manager.softDelete(Location, id);
+    });
     location.deletedAt = new Date();
     return location;
   }
@@ -1169,4 +1212,13 @@ export class HqService {
     })) as QrCode[];
     return new PaginatedResponseDto(data, total, page, limit);
   }
+}
+
+function deletedListOptions(deleted: HqDeletedFilter) {
+  return {
+    withDeleted:
+      deleted === HqDeletedFilter.DELETED || deleted === HqDeletedFilter.ALL,
+    deletedWhere:
+      deleted === HqDeletedFilter.DELETED ? { deletedAt: Not(IsNull()) } : {},
+  };
 }
