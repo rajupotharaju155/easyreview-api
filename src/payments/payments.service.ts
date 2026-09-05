@@ -10,13 +10,19 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
+import { Expense } from '../expenses/entities/expense.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Plan } from '../plans/entities/plan.entity';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
-import { istThisAndLastMonth } from '../subscriptions/utils/ist-date.util';
+import {
+  addDaysToIsoDate,
+  istMidnightUtc,
+  istThisAndLastMonth,
+} from '../subscriptions/utils/ist-date.util';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { HqNetSeriesDto } from './dto/hq-net-series.dto';
 import { HqPaymentSummaryDto } from './dto/hq-payment-summary.dto';
 import { HqPaymentsQueryDto } from './dto/hq-payments-query.dto';
 import { MarkPaymentSuccessDto } from './dto/mark-payment-success.dto';
@@ -24,9 +30,16 @@ import { PaymentsQueryDto } from './dto/payments-query.dto';
 import { SubmitPaymentDto } from './dto/submit-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { Payment } from './entities/payment.entity';
+import { NetSeriesRange } from './enums/net-series-range.enum';
 import { PaymentKind } from './enums/payment-kind.enum';
 import { PaymentProvider } from './enums/payment-provider.enum';
 import { PaymentStatus } from './enums/payment-status.enum';
+import {
+  buildNetSeriesBuckets,
+  netSeriesTruncUnit,
+  toBucketKey,
+  trimLeadingEmptyPoints,
+} from './utils/net-series.util';
 
 function toCount(value: unknown): number {
   const n = Number(value);
@@ -42,6 +55,8 @@ export class PaymentsService {
     private readonly subscriptionRepository: Repository<Subscription>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    @InjectRepository(Expense)
+    private readonly expenseRepository: Repository<Expense>,
     @Inject(forwardRef(() => SubscriptionsService))
     private readonly subscriptionsService: SubscriptionsService,
     private readonly currentUserUtil: CurrentUserUtil,
@@ -240,6 +255,67 @@ export class PaymentsService {
         from: lastMonth.from,
         to: lastMonth.to,
       },
+    });
+  }
+
+  async findNetSeriesForHq(range: NetSeriesRange): Promise<HqNetSeriesDto> {
+    const buckets = buildNetSeriesBuckets(range);
+    const startDate = buckets[0].from;
+    const endExclusiveDate = addDaysToIsoDate(
+      buckets[buckets.length - 1].to,
+      1,
+    );
+    const trunc = netSeriesTruncUnit(range);
+
+    const [paymentRows, expenseRows] = await Promise.all([
+      this.paymentRepository
+        .createQueryBuilder('payment')
+        .select(
+          `date_trunc('${trunc}', payment.succeededAt AT TIME ZONE 'Asia/Kolkata')::date`,
+          'bucket',
+        )
+        .addSelect('COALESCE(SUM(payment.amount), 0)', 'amount')
+        .where('payment.status = :success', { success: PaymentStatus.SUCCESS })
+        .andWhere('payment.succeededAt >= :start', {
+          start: istMidnightUtc(startDate),
+        })
+        .andWhere('payment.succeededAt < :end', {
+          end: istMidnightUtc(endExclusiveDate),
+        })
+        .groupBy('bucket')
+        .getRawMany<{ bucket: unknown; amount: string | number }>(),
+      this.expenseRepository
+        .createQueryBuilder('expense')
+        .select(`date_trunc('${trunc}', expense.incurredAt)::date`, 'bucket')
+        .addSelect('COALESCE(SUM(expense.amount), 0)', 'amount')
+        .where('expense.incurredAt >= :start', { start: startDate })
+        .andWhere('expense.incurredAt < :end', { end: endExclusiveDate })
+        .groupBy('bucket')
+        .getRawMany<{ bucket: unknown; amount: string | number }>(),
+    ]);
+
+    const paymentsByBucket = new Map<string, number>();
+    for (const row of paymentRows) {
+      paymentsByBucket.set(toBucketKey(row.bucket), toCount(row.amount));
+    }
+    const expensesByBucket = new Map<string, number>();
+    for (const row of expenseRows) {
+      expensesByBucket.set(toBucketKey(row.bucket), toCount(row.amount));
+    }
+
+    return new HqNetSeriesDto({
+      currency: 'INR',
+      range,
+      points: trimLeadingEmptyPoints(
+        buckets.map((bucket) => ({
+          key: bucket.key,
+          label: bucket.label,
+          from: bucket.from,
+          to: bucket.to,
+          payments: paymentsByBucket.get(bucket.key) ?? 0,
+          expenses: expensesByBucket.get(bucket.key) ?? 0,
+        })),
+      ),
     });
   }
 
