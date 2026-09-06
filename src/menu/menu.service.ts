@@ -9,6 +9,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import { Product } from '../plans/enums/product.enum';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { MenuStyle } from './enums/menu-style.enum';
 import { MenuPriceType } from './enums/menu-price-type.enum';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -124,6 +126,7 @@ export class MenuService {
     private readonly currentUserUtil: CurrentUserUtil,
     private readonly dataSource: DataSource,
     private readonly menuStorage: MenuStorageService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async getOwnedMenu(locationId: string): Promise<LocationMenuDto> {
@@ -147,7 +150,10 @@ export class MenuService {
       ],
     });
 
-    if (!location || !location.slug || !location.isEasyMenuEnabled) {
+    if (!location || !location.slug) {
+      throw new NotFoundException(`Menu for slug "${slug}" not found`);
+    }
+    if (!(await this.ensureEasyMenuLive(location))) {
       throw new NotFoundException(`Menu for slug "${slug}" not found`);
     }
 
@@ -720,11 +726,22 @@ export class MenuService {
       throw new NotFoundException(`Location with id "${locationId}" not found`);
     }
 
-    if (!location.isEasyMenuEnabled) {
+    if (!(await this.ensureEasyMenuLive(location))) {
       throw new ForbiddenException('EasyMenu is not enabled for this location');
     }
 
     return location;
+  }
+
+  private async ensureEasyMenuLive(location: Location): Promise<boolean> {
+    if (location.isEasyMenuEnabled) return true;
+    const live = await this.subscriptionsService.hasActiveForLocation(
+      location.id,
+      Product.EASY_MENU,
+    );
+    if (!live) return false;
+    location.isEasyMenuEnabled = true;
+    return true;
   }
 
   private async requireCategory(

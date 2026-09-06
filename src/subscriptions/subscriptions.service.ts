@@ -10,8 +10,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   FindOptionsWhere,
+  In,
+  IsNull,
   LessThan,
+  LessThanOrEqual,
   MoreThanOrEqual,
+  Not,
   QueryFailedError,
   Repository,
 } from 'typeorm';
@@ -43,7 +47,11 @@ import {
   buildSubscriptionInvoicePdf,
   type InvoicePayload,
 } from './utils/invoice-pdf';
-import { endDateFromDuration, todayIst } from './utils/ist-date.util';
+import {
+  addDaysToIsoDate,
+  endDateFromDuration,
+  todayIst,
+} from './utils/ist-date.util';
 
 @Injectable()
 export class SubscriptionsService implements OnModuleInit {
@@ -79,21 +87,13 @@ export class SubscriptionsService implements OnModuleInit {
     return this.paginate(where, page, limit);
   }
 
-  /** Live access: an active subscription whose end date has not passed (IST). */
+  /** Live access: an active or in-window queued subscription (IST). */
   async hasActiveForLocation(
     locationId: string,
     product: Product = Product.EASY_REVIEW,
   ): Promise<boolean> {
-    const active = await this.subscriptionRepository.findOne({
-      where: {
-        locationId,
-        product,
-        status: SubscriptionStatus.ACTIVE,
-        endDate: MoreThanOrEqual(todayIst()),
-      },
-      select: ['id'],
-    });
-    return Boolean(active);
+    await this.expireOverdue({ locationId });
+    return Boolean(await this.findLiveForLocation(locationId, product));
   }
 
   async findOneForUser(id: string): Promise<Subscription> {
@@ -286,19 +286,19 @@ export class SubscriptionsService implements OnModuleInit {
     }
 
     await this.expireOverdue({ locationId: input.location.id });
-    await this.assertNoOpenSubscription(input.location.id, input.plan.product);
 
     const isComplimentary = input.plan.amount === 0;
     const paymentStatus = isComplimentary
       ? PaymentStatus.SUCCESS
       : (input.payment?.status ?? PaymentStatus.PENDING);
     const paymentReceived = paymentStatus === PaymentStatus.SUCCESS;
+    const product = input.plan.product ?? Product.EASY_REVIEW;
 
     const subscription = this.subscriptionRepository.create({
       locationId: input.location.id,
       userId: input.location.userId,
       planId: input.plan.id,
-      product: input.plan.product ?? Product.EASY_REVIEW,
+      product,
       source: input.source,
       notes: input.notes?.trim() || null,
       gatewaySubscriptionId: null,
@@ -306,8 +306,9 @@ export class SubscriptionsService implements OnModuleInit {
     });
 
     if (isComplimentary || paymentReceived) {
-      this.activate(subscription, input.plan, input.startDate);
+      await this.assignPaidPeriod(subscription, input.plan, input.startDate);
     } else {
+      await this.assertNoBlockingSubscription(input.location.id, product);
       subscription.status = SubscriptionStatus.PENDING_PAYMENT;
       subscription.startDate = null;
       subscription.endDate = null;
@@ -345,16 +346,23 @@ export class SubscriptionsService implements OnModuleInit {
       );
     }
     if (
-      subscription.status === SubscriptionStatus.ACTIVE &&
+      (subscription.status === SubscriptionStatus.ACTIVE ||
+        subscription.status === SubscriptionStatus.QUEUED) &&
       subscription.startDate &&
       subscription.endDate
     ) {
+      this.syncExpiredFromDates(subscription);
+      await this.subscriptionRepository.save(subscription);
       await this.syncEasyMenuFromSubscription(subscription);
-      return subscription;
+      return this.findOneById(subscriptionId);
     }
     const plan =
       subscription.plan ?? (await this.findPlan(subscription.planId));
-    this.activate(subscription, plan, subscription.startDate ?? undefined);
+    await this.assignPaidPeriod(
+      subscription,
+      plan,
+      subscription.startDate ?? undefined,
+    );
     this.assertDateRange(subscription);
     try {
       await this.subscriptionRepository.save(subscription);
@@ -384,6 +392,19 @@ export class SubscriptionsService implements OnModuleInit {
       return;
     }
 
+    if (status === SubscriptionStatus.QUEUED) {
+      if (!subscription.startDate || !subscription.endDate) {
+        const plan =
+          subscription.plan ?? (await this.findPlan(subscription.planId));
+        this.queue(subscription, plan, subscription.startDate ?? undefined);
+      } else {
+        subscription.status = SubscriptionStatus.QUEUED;
+        subscription.cancelledAt = null;
+        this.syncExpiredFromDates(subscription);
+      }
+      return;
+    }
+
     if (status === SubscriptionStatus.CANCELLED) {
       subscription.status = SubscriptionStatus.CANCELLED;
       subscription.cancelledAt = new Date();
@@ -400,6 +421,48 @@ export class SubscriptionsService implements OnModuleInit {
     subscription.cancelledAt = null;
   }
 
+  private async assignPaidPeriod(
+    subscription: Subscription,
+    plan: Plan,
+    startDate?: string,
+  ): Promise<void> {
+    const today = todayIst();
+    const live = await this.findLiveForLocation(
+      subscription.locationId,
+      subscription.product,
+      subscription.id,
+    );
+    const liveEndDate = live?.endDate ?? null;
+    const defaultStart = liveEndDate
+      ? addDaysToIsoDate(liveEndDate, 1)
+      : today;
+    const start = startDate ?? defaultStart;
+
+    if (live || start > today) {
+      await this.assertNoQueuedSubscription(
+        subscription.locationId,
+        subscription.product,
+        subscription.id,
+      );
+      if (liveEndDate && start <= liveEndDate) {
+        throw new BadRequestException(
+          `startDate must be after the current plan ends (${liveEndDate})`,
+        );
+      }
+      this.queue(subscription, plan, start);
+      await this.assertNoOverlappingWindow(subscription);
+      return;
+    }
+
+    await this.assertNoOpenSubscription(
+      subscription.locationId,
+      subscription.product,
+      subscription.id,
+    );
+    this.activate(subscription, plan, start);
+    await this.assertNoOverlappingWindow(subscription);
+  }
+
   private activate(
     subscription: Subscription,
     plan: Plan,
@@ -413,13 +476,38 @@ export class SubscriptionsService implements OnModuleInit {
     this.syncExpiredFromDates(subscription);
   }
 
+  private queue(
+    subscription: Subscription,
+    plan: Plan,
+    startDate?: string,
+  ): void {
+    const start = startDate ?? todayIst();
+    subscription.status = SubscriptionStatus.QUEUED;
+    subscription.startDate = start;
+    subscription.endDate = endDateFromDuration(start, plan.durationDays);
+    subscription.cancelledAt = null;
+    this.syncExpiredFromDates(subscription);
+  }
+
   private syncExpiredFromDates(subscription: Subscription): void {
+    const today = todayIst();
     if (
-      subscription.status === SubscriptionStatus.ACTIVE &&
+      (subscription.status === SubscriptionStatus.ACTIVE ||
+        subscription.status === SubscriptionStatus.QUEUED) &&
       subscription.endDate &&
-      subscription.endDate < todayIst()
+      subscription.endDate < today
     ) {
       subscription.status = SubscriptionStatus.EXPIRED;
+      return;
+    }
+    if (
+      subscription.status === SubscriptionStatus.QUEUED &&
+      subscription.startDate &&
+      subscription.startDate <= today &&
+      subscription.endDate &&
+      subscription.endDate >= today
+    ) {
+      subscription.status = SubscriptionStatus.ACTIVE;
     }
   }
 
@@ -433,23 +521,45 @@ export class SubscriptionsService implements OnModuleInit {
     }
   }
 
+  private async assertNoBlockingSubscription(
+    locationId: string,
+    product: Product,
+    excludeId?: string,
+  ): Promise<void> {
+    const existing = await this.subscriptionRepository.findOne({
+      where: {
+        locationId,
+        product,
+        status: In([
+          SubscriptionStatus.PENDING_PAYMENT,
+          SubscriptionStatus.QUEUED,
+          SubscriptionStatus.ACTIVE,
+        ]),
+        ...(excludeId ? { id: Not(excludeId) } : {}),
+      },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `This location already has a pending, queued, or active ${productDisplayName(product)} subscription`,
+      );
+    }
+  }
+
   private async assertNoOpenSubscription(
     locationId: string,
     product: Product,
+    excludeId?: string,
   ): Promise<void> {
     const existing = await this.subscriptionRepository.findOne({
-      where: [
-        {
-          locationId,
-          product,
-          status: SubscriptionStatus.PENDING_PAYMENT,
-        },
-        {
-          locationId,
-          product,
-          status: SubscriptionStatus.ACTIVE,
-        },
-      ],
+      where: {
+        locationId,
+        product,
+        status: In([
+          SubscriptionStatus.PENDING_PAYMENT,
+          SubscriptionStatus.ACTIVE,
+        ]),
+        ...(excludeId ? { id: Not(excludeId) } : {}),
+      },
     });
     if (existing) {
       throw new ConflictException(
@@ -458,58 +568,197 @@ export class SubscriptionsService implements OnModuleInit {
     }
   }
 
+  private async assertNoQueuedSubscription(
+    locationId: string,
+    product: Product,
+    excludeId?: string,
+  ): Promise<void> {
+    const existing = await this.subscriptionRepository.findOne({
+      where: {
+        locationId,
+        product,
+        status: SubscriptionStatus.QUEUED,
+        ...(excludeId ? { id: Not(excludeId) } : {}),
+      },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `This location already has a queued ${productDisplayName(product)} subscription`,
+      );
+    }
+  }
+
+  private async assertNoOverlappingWindow(
+    subscription: Subscription,
+  ): Promise<void> {
+    if (!subscription.startDate || !subscription.endDate) return;
+
+    const overlapping = await this.subscriptionRepository.findOne({
+      where: {
+        locationId: subscription.locationId,
+        product: subscription.product,
+        status: In([SubscriptionStatus.ACTIVE, SubscriptionStatus.QUEUED]),
+        startDate: LessThanOrEqual(subscription.endDate),
+        endDate: MoreThanOrEqual(subscription.startDate),
+        ...(subscription.id ? { id: Not(subscription.id) } : {}),
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(
+        `This ${productDisplayName(subscription.product)} plan overlaps ${overlapping.startDate} to ${overlapping.endDate}`,
+      );
+    }
+  }
+
+  private async findLiveForLocation(
+    locationId: string,
+    product: Product,
+    excludeId?: string,
+  ): Promise<Subscription | null> {
+    const today = todayIst();
+    const exclude = excludeId ? { id: Not(excludeId) } : {};
+    return this.subscriptionRepository.findOne({
+      where: [
+        {
+          locationId,
+          product,
+          status: SubscriptionStatus.ACTIVE,
+          endDate: MoreThanOrEqual(today),
+          startDate: LessThanOrEqual(today),
+          ...exclude,
+        },
+        {
+          locationId,
+          product,
+          status: SubscriptionStatus.ACTIVE,
+          endDate: MoreThanOrEqual(today),
+          startDate: IsNull(),
+          ...exclude,
+        },
+        {
+          locationId,
+          product,
+          status: SubscriptionStatus.QUEUED,
+          endDate: MoreThanOrEqual(today),
+          startDate: LessThanOrEqual(today),
+          ...exclude,
+        },
+      ],
+    });
+  }
+
   private async expireOverdue(filter: {
     locationId?: string;
     userId?: string;
   }): Promise<void> {
+    const today = todayIst();
     const dueWhere: FindOptionsWhere<Subscription> = {
-      status: SubscriptionStatus.ACTIVE,
       product: Product.EASY_MENU,
-      endDate: LessThan(todayIst()),
+      endDate: LessThan(today),
     };
     if (filter.locationId) dueWhere.locationId = filter.locationId;
     if (filter.userId) dueWhere.userId = filter.userId;
 
     const dueEasyMenu = await this.subscriptionRepository.find({
-      where: dueWhere,
+      where: [
+        { ...dueWhere, status: SubscriptionStatus.ACTIVE },
+        { ...dueWhere, status: SubscriptionStatus.QUEUED },
+      ],
       select: ['locationId'],
     });
 
-    const qb = this.subscriptionRepository
+    const promoteWhere: FindOptionsWhere<Subscription> = {
+      product: Product.EASY_MENU,
+      status: SubscriptionStatus.QUEUED,
+      startDate: LessThanOrEqual(today),
+      endDate: MoreThanOrEqual(today),
+    };
+    if (filter.locationId) promoteWhere.locationId = filter.locationId;
+    if (filter.userId) promoteWhere.userId = filter.userId;
+
+    const duePromoteEasyMenu = await this.subscriptionRepository.find({
+      where: promoteWhere,
+      select: ['locationId'],
+    });
+
+    const expireQb = this.subscriptionRepository
       .createQueryBuilder()
       .update(Subscription)
       .set({ status: SubscriptionStatus.EXPIRED })
-      .where('status = :status', { status: SubscriptionStatus.ACTIVE })
-      .andWhere('"endDate" < :today', { today: todayIst() });
+      .where('status IN (:...expireStatuses)', {
+        expireStatuses: [
+          SubscriptionStatus.ACTIVE,
+          SubscriptionStatus.QUEUED,
+        ],
+      })
+      .andWhere('"endDate" < :today', { today });
 
     if (filter.locationId) {
-      qb.andWhere('"locationId" = :locationId', {
+      expireQb.andWhere('"locationId" = :locationId', {
         locationId: filter.locationId,
       });
     }
     if (filter.userId) {
-      qb.andWhere('"userId" = :userId', { userId: filter.userId });
+      expireQb.andWhere('"userId" = :userId', { userId: filter.userId });
     }
 
-    await qb.execute();
+    await expireQb.execute();
 
-    const locationIds = [
+    const promoteQb = this.subscriptionRepository
+      .createQueryBuilder()
+      .update(Subscription)
+      .set({ status: SubscriptionStatus.ACTIVE })
+      .where('status = :queued', { queued: SubscriptionStatus.QUEUED })
+      .andWhere('"startDate" <= :today', { today })
+      .andWhere('"endDate" >= :today', { today })
+      .andWhere(
+        `NOT EXISTS (
+          SELECT 1 FROM subscriptions other
+          WHERE other."locationId" = subscriptions."locationId"
+            AND other.product = subscriptions.product
+            AND other.status = :activeStatus
+            AND other.id <> subscriptions.id
+        )`,
+        { activeStatus: SubscriptionStatus.ACTIVE },
+      );
+
+    if (filter.locationId) {
+      promoteQb.andWhere('"locationId" = :locationId', {
+        locationId: filter.locationId,
+      });
+    }
+    if (filter.userId) {
+      promoteQb.andWhere('"userId" = :userId', { userId: filter.userId });
+    }
+
+    await promoteQb.execute();
+
+    const expiredLocationIds = [
       ...new Set(dueEasyMenu.map((item) => item.locationId)),
     ];
-    for (const locationId of locationIds) {
+    for (const locationId of expiredLocationIds) {
       await this.disableEasyMenuIfInactive(locationId);
+    }
+
+    const promotedLocationIds = [
+      ...new Set(duePromoteEasyMenu.map((item) => item.locationId)),
+    ];
+    for (const locationId of promotedLocationIds) {
+      if (await this.findLiveForLocation(locationId, Product.EASY_MENU)) {
+        await this.locationRepository.update(
+          { id: locationId },
+          { isEasyMenuEnabled: true },
+        );
+      }
     }
   }
 
   private async expireIfOverdue(subscription: Subscription): Promise<void> {
-    if (
-      subscription.status !== SubscriptionStatus.ACTIVE ||
-      !subscription.endDate ||
-      subscription.endDate >= todayIst()
-    ) {
+    const before = subscription.status;
+    this.syncExpiredFromDates(subscription);
+    if (subscription.status === before) {
       return;
     }
-    subscription.status = SubscriptionStatus.EXPIRED;
     await this.subscriptionRepository.save(subscription);
     await this.syncEasyMenuFromSubscription(subscription);
   }
@@ -616,7 +865,7 @@ export class SubscriptionsService implements OnModuleInit {
         .driverError?.code === '23505'
     ) {
       throw new ConflictException(
-        'This location already has a pending or active subscription for this product',
+        'This location already has a pending, queued, or active subscription for this product',
       );
     }
   }
@@ -626,7 +875,11 @@ export class SubscriptionsService implements OnModuleInit {
   ): Promise<void> {
     if (subscription.product !== Product.EASY_MENU) return;
 
-    if (subscription.status === SubscriptionStatus.ACTIVE) {
+    if (
+      subscription.status === SubscriptionStatus.ACTIVE ||
+      (subscription.status === SubscriptionStatus.QUEUED &&
+        isLiveWindow(subscription))
+    ) {
       await this.locationRepository.update(
         { id: subscription.locationId },
         { isEasyMenuEnabled: true },
@@ -643,7 +896,7 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   private async disableEasyMenuIfInactive(locationId: string): Promise<void> {
-    const stillActive = await this.hasActiveForLocation(
+    const stillActive = await this.findLiveForLocation(
       locationId,
       Product.EASY_MENU,
     );
@@ -683,6 +936,15 @@ export class SubscriptionsService implements OnModuleInit {
       );
     }
   }
+}
+
+function isLiveWindow(
+  subscription: Pick<Subscription, 'startDate' | 'endDate'>,
+  today = todayIst(),
+): boolean {
+  if (subscription.endDate && subscription.endDate < today) return false;
+  if (subscription.startDate && subscription.startDate > today) return false;
+  return true;
 }
 
 function invoiceFileSlug(product: Product | string | null | undefined): string {

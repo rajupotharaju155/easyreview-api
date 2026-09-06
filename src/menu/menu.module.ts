@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Location } from '../locations/entities/location.entity';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { MenuCategory } from './entities/menu-category.entity';
 import { MenuComboItem } from './entities/menu-combo-item.entity';
 import { MenuCombo } from './entities/menu-combo.entity';
@@ -21,6 +22,7 @@ import { PublicMenuController } from './public-menu.controller';
       MenuSpecial,
       Location,
     ]),
+    SubscriptionsModule,
   ],
   controllers: [MenuController, PublicMenuController],
   providers: [MenuService, MenuStorageService],
