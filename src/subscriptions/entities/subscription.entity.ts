@@ -26,6 +26,10 @@ import { SubscriptionStatus } from '../enums/subscription-status.enum';
   unique: true,
   where: `"status" IN ('pending_payment', 'active')`,
 })
+@Index('UQ_subscriptions_queued_location_product', ['locationId', 'product'], {
+  unique: true,
+  where: `"status" = 'queued'`,
+})
 export class Subscription {
   constructor(data: Partial<Subscription>) {
     Object.assign(this, data);

@@ -131,6 +131,7 @@ async function main(): Promise<void> {
             product: Product.EASY_REVIEW,
             status: In([
               SubscriptionStatus.PENDING_PAYMENT,
+              SubscriptionStatus.QUEUED,
               SubscriptionStatus.ACTIVE,
             ]),
           },

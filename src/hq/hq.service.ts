@@ -80,6 +80,15 @@ const OPEN_ORDER_STATUSES = [
   OrderStatus.SHIPPED,
 ];
 
+const LIVE_SUBSCRIPTION_STATUSES = [
+  SubscriptionStatus.ACTIVE,
+  SubscriptionStatus.QUEUED,
+] as const;
+
+function LIVE_SUBSCRIPTION_SQL(alias: string): string {
+  return `"${alias}"."status" IN (:...liveStatuses) AND "${alias}"."endDate" >= :today AND ("${alias}"."startDate" IS NULL OR "${alias}"."startDate" <= :today)`;
+}
+
 export type HqAttentionCounts = Record<AttentionQueueKey, number>;
 
 export type HqSubscriptionQueueCounts = Record<SubscriptionQueueKey, number>;
@@ -378,9 +387,9 @@ export class HqService {
       .leftJoin(
         Subscription,
         'activeSub',
-        'activeSub.locationId = location.id AND activeSub.status = :activeStatus AND activeSub.endDate >= :today AND activeSub.product = :reviewProduct',
+        `activeSub.locationId = location.id AND activeSub.product = :reviewProduct AND ${LIVE_SUBSCRIPTION_SQL('activeSub')}`,
         {
-          activeStatus: SubscriptionStatus.ACTIVE,
+          liveStatuses: LIVE_SUBSCRIPTION_STATUSES,
           today,
           reviewProduct: Product.EASY_REVIEW,
         },
@@ -401,10 +410,13 @@ export class HqService {
       .createQueryBuilder('subscription')
       .innerJoinAndSelect('subscription.plan', 'plan')
       .innerJoinAndSelect('subscription.location', 'location')
-      .where('subscription.status = :status', {
-        status: SubscriptionStatus.ACTIVE,
+      .where('subscription.status IN (:...liveStatuses)', {
+        liveStatuses: LIVE_SUBSCRIPTION_STATUSES,
       })
       .andWhere('subscription.endDate >= :today', { today })
+      .andWhere('(subscription.startDate IS NULL OR subscription.startDate <= :today)', {
+        today,
+      })
       .andWhere('subscription.endDate <= :until', { until })
       .orderBy('subscription.endDate', 'ASC');
   }
@@ -418,8 +430,8 @@ export class HqService {
       .leftJoin(
         Subscription,
         'liveSub',
-        'liveSub.locationId = subscription.locationId AND liveSub.product = subscription.product AND liveSub.status = :activeStatus AND liveSub.endDate >= :today',
-        { activeStatus: SubscriptionStatus.ACTIVE, today },
+        `liveSub.locationId = subscription.locationId AND liveSub.product = subscription.product AND ${LIVE_SUBSCRIPTION_SQL('liveSub')}`,
+        { liveStatuses: LIVE_SUBSCRIPTION_STATUSES, today },
       )
       .where('liveSub.id IS NULL')
       .andWhere('subscription.endDate < :today', { today })
@@ -442,8 +454,8 @@ export class HqService {
       .withDeleted()
       .innerJoinAndSelect('subscription.plan', 'plan')
       .leftJoinAndSelect('subscription.location', 'location')
-      .where('subscription.status = :status', {
-        status: SubscriptionStatus.ACTIVE,
+      .where('subscription.status IN (:...openStatuses)', {
+        openStatuses: LIVE_SUBSCRIPTION_STATUSES,
       })
       .andWhere('subscription.endDate >= :today', { today })
       .andWhere('plan.durationDays >= :minDays', { minDays });
@@ -467,8 +479,8 @@ export class HqService {
       .withDeleted()
       .innerJoinAndSelect('subscription.plan', 'plan')
       .leftJoinAndSelect('subscription.location', 'location')
-      .where('subscription.status = :status', {
-        status: SubscriptionStatus.ACTIVE,
+      .where('subscription.status IN (:...openStatuses)', {
+        openStatuses: LIVE_SUBSCRIPTION_STATUSES,
       })
       .andWhere('subscription.endDate >= :today', { today });
 
