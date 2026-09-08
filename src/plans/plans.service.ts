@@ -81,6 +81,7 @@ export class PlansService implements OnModuleInit {
         name: dto.name,
         product: dto.product,
         amount: dto.amount,
+        usdAmount: dto.usdAmount,
         currency: dto.currency ?? 'INR',
         durationDays: dto.durationDays,
         isActive: dto.isActive ?? true,
@@ -104,6 +105,7 @@ export class PlansService implements OnModuleInit {
     if (dto.name !== undefined) plan.name = dto.name;
     plan.product = dto.product;
     if (dto.amount !== undefined) plan.amount = dto.amount;
+    if (dto.usdAmount !== undefined) plan.usdAmount = dto.usdAmount;
     if (dto.currency !== undefined) plan.currency = dto.currency;
     if (dto.durationDays !== undefined) plan.durationDays = dto.durationDays;
     if (dto.isActive !== undefined) plan.isActive = dto.isActive;

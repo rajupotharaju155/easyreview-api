@@ -22,6 +22,7 @@ export type PlanSeed = {
   name: string;
   product: Product;
   amount: number;
+  usdAmount: number;
   currency: string;
   durationDays: number;
   isActive: boolean;
@@ -43,6 +44,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_REVIEW,
     amount: 7,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 7,
     isActive: true,
     sortOrder: 1,
@@ -59,6 +61,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_REVIEW,
     amount: 299,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 30,
     isActive: true,
     sortOrder: 2,
@@ -70,6 +73,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_REVIEW,
     amount: 999,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 180,
     isActive: true,
     sortOrder: 3,
@@ -81,6 +85,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_REVIEW,
     amount: 1499,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 365,
     isActive: true,
     sortOrder: 4,
@@ -98,6 +103,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_REVIEW,
     amount: 0,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 14,
     isActive: true,
     sortOrder: 99,
@@ -109,6 +115,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_MENU,
     amount: 399,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 30,
     isActive: true,
     sortOrder: 11,
@@ -120,6 +127,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_MENU,
     amount: 1999,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 180,
     isActive: true,
     sortOrder: 12,
@@ -131,6 +139,7 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     product: Product.EASY_MENU,
     amount: 3499,
     currency: 'INR',
+    usdAmount: 0,
     durationDays: 365,
     isActive: true,
     sortOrder: 13,
