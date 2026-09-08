@@ -44,6 +44,11 @@ export class CreatePlanDto {
   @Min(0)
   amount: number;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  usdAmount: number;
+
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,

@@ -38,6 +38,12 @@ export class User {
   @Column({ default: false })
   emailVerified: boolean;
 
+  @Column({ type: 'varchar', length: 8, nullable: true })
+  countryCode: string | null;
+
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  phone: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   @Exclude()
   emailVerificationOtp: string | null;

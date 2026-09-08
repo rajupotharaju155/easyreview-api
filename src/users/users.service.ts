@@ -8,6 +8,7 @@ import { QueryFailedError, Repository, UpdateResult } from 'typeorm';
 import { generateHashPassword } from '../common/utils/token.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserPhoneDto } from './dto/update-user-phone.dto';
 import { User } from './entities/user.entity';
 
 @Injectable()
@@ -126,6 +127,15 @@ export class UsersService {
       emailVerificationOtpExpiresAt: null,
     });
     return this.findOne(userId);
+  }
+
+  async updatePhone(id: string, dto: UpdateUserPhoneDto): Promise<User> {
+    await this.findOne(id);
+    await this.userRepository.update(id, {
+      countryCode: dto.countryCode,
+      phone: dto.phone,
+    });
+    return this.findOne(id);
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
