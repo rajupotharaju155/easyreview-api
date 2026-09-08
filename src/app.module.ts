@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { EmailVerifiedGuard } from './auth/guards/email-verified.guard';
 import { CommonModule } from './common/common.module';
+import { ContactMessagesModule } from './contact-messages/contact-messages.module';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 import { LoggerService } from './common/services/logger.service';
 import { DatabaseModule } from './database/database.module';
@@ -67,6 +68,7 @@ const ignoreEnvFile =
       ignoreEnvFile,
     }),
     CommonModule,
+    ContactMessagesModule,
     DatabaseModule,
     AuthModule,
     HqModule,
