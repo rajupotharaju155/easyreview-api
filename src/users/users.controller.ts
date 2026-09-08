@@ -11,6 +11,7 @@ import { AllowUnverified } from '../common/decorators/allow-unverified.decorator
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserPhoneDto } from './dto/update-user-phone.dto';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 
@@ -22,6 +23,14 @@ export class UsersController {
   @Get('me')
   getCurrentUser(@CurrentUser() user: User) {
     return user;
+  }
+
+  @Patch('me')
+  updateCurrentUser(
+    @CurrentUser() user: User,
+    @Body() dto: UpdateUserPhoneDto,
+  ) {
+    return this.usersService.updatePhone(user.id, dto);
   }
 
   @Post()
