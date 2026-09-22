@@ -25,7 +25,11 @@ function estimateWidth(text: string, fontSize: number): number {
   return letters.length * fontSize * em;
 }
 
-function wrapToWidth(text: string, fontSize: number, maxWidth: number): string[] {
+function wrapToWidth(
+  text: string,
+  fontSize: number,
+  maxWidth: number,
+): string[] {
   const words = text.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
 
@@ -108,14 +112,16 @@ export async function stampStoryBrand(
   const phoneSize = Math.round(width * PHONE_SIZE_RATIO);
   const nameLineHeight = Math.round(nameSize * 1.18);
   const blockHeight =
-    lines.length * nameLineHeight + (phoneText ? Math.round(phoneSize * 1.55) : 0);
+    lines.length * nameLineHeight +
+    (phoneText ? Math.round(phoneSize * 1.55) : 0);
   const verticalPad = Math.round(height * 0.018);
   const footerHeight = Math.max(
     Math.round(height * MIN_FOOTER_RATIO),
     blockHeight + verticalPad * 2,
   );
   const footerTop = height - footerHeight;
-  const firstNameY = footerTop + verticalPad + (lines.length ? nameSize : phoneSize);
+  const firstNameY =
+    footerTop + verticalPad + (lines.length ? nameSize : phoneSize);
   const phoneY = lines.length
     ? firstNameY +
       (lines.length - 1) * nameLineHeight +
@@ -126,9 +132,7 @@ export async function stampStoryBrand(
   const nameSpans = lines
     .map((line, index) => {
       const yAttr =
-        index === 0
-          ? `y="${firstNameY}"`
-          : `dy="${nameLineHeight}"`;
+        index === 0 ? `y="${firstNameY}"` : `dy="${nameLineHeight}"`;
       return `<tspan x="${centerX}" ${yAttr}>${escapeXml(line)}</tspan>`;
     })
     .join('');

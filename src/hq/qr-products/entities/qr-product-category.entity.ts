@@ -40,4 +40,3 @@ export class QrProductCategory {
     if (!this.id) this.id = generateId();
   }
 }
-

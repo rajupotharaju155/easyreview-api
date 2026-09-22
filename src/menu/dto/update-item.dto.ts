@@ -69,7 +69,8 @@ export class UpdateItemDto {
 
   @IsOptional()
   @ValidateIf(
-    (dto: UpdateItemDto) => dto.halfPrice !== null && dto.halfPrice !== undefined,
+    (dto: UpdateItemDto) =>
+      dto.halfPrice !== null && dto.halfPrice !== undefined,
   )
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

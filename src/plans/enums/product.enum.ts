@@ -8,7 +8,10 @@ export const PRODUCT_DISPLAY_NAME: Record<Product, string> = {
   [Product.EASY_MENU]: 'EasyMenu',
 };
 
-export function productDisplayName(product: Product | string | null | undefined): string {
-  if (product === Product.EASY_MENU) return PRODUCT_DISPLAY_NAME[Product.EASY_MENU];
+export function productDisplayName(
+  product: Product | string | null | undefined,
+): string {
+  if (product === Product.EASY_MENU)
+    return PRODUCT_DISPLAY_NAME[Product.EASY_MENU];
   return PRODUCT_DISPLAY_NAME[Product.EASY_REVIEW];
 }

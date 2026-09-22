@@ -6,4 +6,3 @@ export class CreateQrProductCategoryDto {
   @MaxLength(120)
   name: string;
 }
-

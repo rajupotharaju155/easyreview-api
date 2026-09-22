@@ -6,8 +6,6 @@ export interface HqAdmin {
 
 export function isHqAdmin(user: unknown): user is HqAdmin {
   return (
-    typeof user === 'object' &&
-    user !== null &&
-    (user as HqAdmin).isHq === true
+    typeof user === 'object' && user !== null && (user as HqAdmin).isHq === true
   );
 }

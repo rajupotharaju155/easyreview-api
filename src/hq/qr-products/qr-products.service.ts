@@ -93,7 +93,9 @@ export class QrProductsService {
     return this.productRepository.findOne({ where: { id: productId } });
   }
 
-  async createCategory(dto: CreateQrProductCategoryDto): Promise<QrProductCategoryDto> {
+  async createCategory(
+    dto: CreateQrProductCategoryDto,
+  ): Promise<QrProductCategoryDto> {
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('Category name is required');
 
@@ -216,7 +218,9 @@ export class QrProductsService {
     const saved = await this.productRepository.save(product);
 
     const nextImageUrls = saved.imageUrls ?? [];
-    const removed = previousImageUrls.filter((url) => !nextImageUrls.includes(url));
+    const removed = previousImageUrls.filter(
+      (url) => !nextImageUrls.includes(url),
+    );
     if (removed.length > 0) {
       await this.deleteManagedImagesIfUnused(removed);
     }
@@ -259,7 +263,9 @@ export class QrProductsService {
     return product;
   }
 
-  async uploadImage(file: Parameters<QrProductsStorageService['uploadImage']>[0]) {
+  async uploadImage(
+    file: Parameters<QrProductsStorageService['uploadImage']>[0],
+  ) {
     return this.storage.uploadImage(file);
   }
 
@@ -281,17 +287,21 @@ export class QrProductsService {
   }
 
   private requireCategory(categoryId: string): Promise<QrProductCategory> {
-    return this.categoryRepository.findOne({ where: { id: categoryId } }).then((c) => {
-      if (!c) throw new NotFoundException('Category not found');
-      return c;
-    });
+    return this.categoryRepository
+      .findOne({ where: { id: categoryId } })
+      .then((c) => {
+        if (!c) throw new NotFoundException('Category not found');
+        return c;
+      });
   }
 
   private requireProduct(productId: string): Promise<QrProduct> {
-    return this.productRepository.findOne({ where: { id: productId } }).then((p) => {
-      if (!p) throw new NotFoundException('Product not found');
-      return p;
-    });
+    return this.productRepository
+      .findOne({ where: { id: productId } })
+      .then((p) => {
+        if (!p) throw new NotFoundException('Product not found');
+        return p;
+      });
   }
 
   private assertImageUrls(imageUrls: string[]): void {
@@ -305,7 +315,9 @@ export class QrProductsService {
     for (const url of imageUrls) {
       if (!url) throw new BadRequestException('Image URL cannot be empty');
       if (url.startsWith('data:')) {
-        throw new BadRequestException('Upload images instead of embedding them');
+        throw new BadRequestException(
+          'Upload images instead of embedding them',
+        );
       }
       if (url.length > MAX_IMAGE_URL_LENGTH) {
         throw new BadRequestException('Image URL is too long');
@@ -326,7 +338,9 @@ export class QrProductsService {
     };
   }
 
-  private async deleteManagedImagesIfUnused(imageUrls: string[]): Promise<void> {
+  private async deleteManagedImagesIfUnused(
+    imageUrls: string[],
+  ): Promise<void> {
     const uniqueUrls = [...new Set(imageUrls.filter((url) => Boolean(url)))];
     await Promise.all(
       uniqueUrls.map(async (url) => {
@@ -341,4 +355,3 @@ export class QrProductsService {
     );
   }
 }
-

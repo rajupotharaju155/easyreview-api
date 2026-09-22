@@ -7,4 +7,3 @@ export class UpdateQrProductCategoryDto {
   @MaxLength(120)
   name?: string;
 }
-

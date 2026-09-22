@@ -47,9 +47,7 @@ export class AuthService {
 
   async register(registerDto: RegisterDto): Promise<LoginResponseDto> {
     if (!validatePassword(registerDto.password)) {
-      throw new BadRequestException(
-        'Password must be at least 8 characters',
-      );
+      throw new BadRequestException('Password must be at least 8 characters');
     }
 
     const user = await this.usersService.create(registerDto);

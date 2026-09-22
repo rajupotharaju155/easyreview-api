@@ -29,11 +29,12 @@ export class StoryStorageService {
       throw new BadRequestException('Generated image was empty');
     }
 
-    const extension = mimeType.includes('jpeg') || mimeType.includes('jpg')
-      ? 'jpg'
-      : mimeType.includes('webp')
-        ? 'webp'
-        : 'png';
+    const extension =
+      mimeType.includes('jpeg') || mimeType.includes('jpg')
+        ? 'jpg'
+        : mimeType.includes('webp')
+          ? 'webp'
+          : 'png';
     const objectPath = `locations/${locationId}/stories/${generateId()}.${extension}`;
     const bucket = this.storage.bucket(bucketName);
     await bucket.file(objectPath).save(bytes, {

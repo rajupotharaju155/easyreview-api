@@ -1,4 +1,11 @@
-import { Controller, Delete, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { HqGuard } from '../hq/guards/hq.guard';
 import { ContactMessagesService } from './contact-messages.service';

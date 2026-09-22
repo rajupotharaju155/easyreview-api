@@ -46,4 +46,3 @@ export class CreateQrProductDto {
   @IsString({ each: true })
   imageUrls: string[];
 }
-

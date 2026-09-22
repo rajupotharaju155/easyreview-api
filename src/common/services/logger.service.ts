@@ -102,13 +102,7 @@ export class LoggerService implements NestLoggerService {
       return;
     }
 
-    const {
-      context: _context,
-      trace,
-      details,
-      httpRequest,
-      ...fields
-    } = meta;
+    const { context: _context, trace, details, httpRequest, ...fields } = meta;
     const nestedDetails =
       details && typeof details === 'object' && !Array.isArray(details)
         ? { ...details, ...fields }
