@@ -1,5 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaymentKind } from '../enums/payment-kind.enum';
 import { PaymentProvider } from '../enums/payment-provider.enum';

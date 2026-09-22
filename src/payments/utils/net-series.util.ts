@@ -55,7 +55,10 @@ export function buildNetSeriesBuckets(
   if (range === NetSeriesRange.WEEKLY) {
     const thisMonday = startOfIsoWeek(today);
     return Array.from({ length: WEEKLY_COUNT }, (_, index) => {
-      const from = addDaysToIsoDate(thisMonday, (index - (WEEKLY_COUNT - 1)) * 7);
+      const from = addDaysToIsoDate(
+        thisMonday,
+        (index - (WEEKLY_COUNT - 1)) * 7,
+      );
       const to = addDaysToIsoDate(from, 6);
       return { key: from, label: dayLabel(from), from, to };
     });
@@ -65,7 +68,11 @@ export function buildNetSeriesBuckets(
 
   if (range === NetSeriesRange.MONTHLY) {
     return Array.from({ length: MONTHLY_COUNT }, (_, index) => {
-      const point = addMonthsToYearMonth(year, month, index - (MONTHLY_COUNT - 1));
+      const point = addMonthsToYearMonth(
+        year,
+        month,
+        index - (MONTHLY_COUNT - 1),
+      );
       const from = formatIsoDateParts(point.year, point.month, 1);
       const to = formatIsoDateParts(
         point.year,
@@ -94,7 +101,9 @@ export function buildNetSeriesBuckets(
   });
 }
 
-export function netSeriesTruncUnit(range: NetSeriesRange): 'week' | 'month' | 'year' {
+export function netSeriesTruncUnit(
+  range: NetSeriesRange,
+): 'week' | 'month' | 'year' {
   if (range === NetSeriesRange.WEEKLY) return 'week';
   if (range === NetSeriesRange.MONTHLY) return 'month';
   return 'year';

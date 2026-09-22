@@ -38,14 +38,13 @@ function locationParts(ctx: ReviewPromptContext): string {
 
 function answerLines(ctx: ReviewPromptContext): string[] {
   return ctx.answers.map(
-    ({ question, answers: selected }) => `- ${question}: ${selected.join(', ')}`,
+    ({ question, answers: selected }) =>
+      `- ${question}: ${selected.join(', ')}`,
   );
 }
 
 function scriptSpec(language: string): string {
-  return usesLatinScript(language)
-    ? 'latinScript=true'
-    : 'latinScript=false';
+  return usesLatinScript(language) ? 'latinScript=true' : 'latinScript=false';
 }
 
 function specLines(ctx: ReviewPromptContext): string[] {
@@ -63,7 +62,7 @@ function scriptRules(): string[] {
   return [
     '- Write each draft in its assigned language, using the script that draft specifies.',
     '- latinScript=true: write that language using Latin/English letters only (transliteration). Never use native scripts such as Telugu, Hindi, or Arabic script.',
-    '- latinScript=false: write in that language\'s own script (for example Georgian Mkhedruli). Do not romanize or transliterate the review into English letters.',
+    "- latinScript=false: write in that language's own script (for example Georgian Mkhedruli). Do not romanize or transliterate the review into English letters.",
     '- When latinScript=false, the business name is a proper noun. Keep the same name; only write those sounds in the native script. Do not translate it. Example: "Crush Mens Salon" stays Crush Mens Salon in Georgian letters — never "Krabi" or a translation of the word crush.',
   ];
 }

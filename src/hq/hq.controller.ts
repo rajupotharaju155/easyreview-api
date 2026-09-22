@@ -147,7 +147,10 @@ export class HqController {
     @Param('id') id: string,
     @Query() query: HqDeleteLocationQueryDto,
   ): Promise<Location> {
-    return this.hqService.deleteLocation(id, query.deleteSubscriptions === true);
+    return this.hqService.deleteLocation(
+      id,
+      query.deleteSubscriptions === true,
+    );
   }
 
   @UseGuards(HqGuard)

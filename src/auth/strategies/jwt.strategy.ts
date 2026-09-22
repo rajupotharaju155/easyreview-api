@@ -5,10 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Repository } from 'typeorm';
 import { HqAdmin } from '../../hq/hq-admin.interface';
-import {
-  HQ_TOKEN_TYPE,
-  LOGIN_AS_TOKEN_TYPE,
-} from '../../hq/hq.constants';
+import { HQ_TOKEN_TYPE, LOGIN_AS_TOKEN_TYPE } from '../../hq/hq.constants';
 import { User } from '../../users/entities/user.entity';
 
 export interface JwtPayload {

@@ -24,6 +24,7 @@ import { OrdersModule } from './orders/orders.module';
 import { PlansModule } from './plans/plans.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrivateFeedbackModule } from './private-feedback/private-feedback.module';
+import { ProfilesModule } from './profiles/profiles.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ReviewModule } from './review/review.module';
 import { StoriesModule } from './stories/stories.module';
@@ -84,6 +85,7 @@ const ignoreEnvFile =
     PaymentsModule,
     ExpensesModule,
     PrivateFeedbackModule,
+    ProfilesModule,
     ReviewModule,
     StoriesModule,
     EmailModule,

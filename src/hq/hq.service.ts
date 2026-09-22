@@ -414,9 +414,12 @@ export class HqService {
         liveStatuses: LIVE_SUBSCRIPTION_STATUSES,
       })
       .andWhere('subscription.endDate >= :today', { today })
-      .andWhere('(subscription.startDate IS NULL OR subscription.startDate <= :today)', {
-        today,
-      })
+      .andWhere(
+        '(subscription.startDate IS NULL OR subscription.startDate <= :today)',
+        {
+          today,
+        },
+      )
       .andWhere('subscription.endDate <= :until', { until })
       .orderBy('subscription.endDate', 'ASC');
   }
@@ -624,9 +627,7 @@ export class HqService {
    * Lists users globally; search matches id or email.
    * Defaults to active (non-deleted) users.
    */
-  async findUsers(
-    query: HqUsersQueryDto,
-  ): Promise<PaginatedResponseDto<User>> {
+  async findUsers(query: HqUsersQueryDto): Promise<PaginatedResponseDto<User>> {
     const {
       page = 1,
       limit = 10,
@@ -771,7 +772,9 @@ export class HqService {
         });
         if (subscriptions.length > 0) {
           await manager.delete(Subscription, { locationId: id });
-          if (subscriptions.some((item) => item.product === Product.EASY_MENU)) {
+          if (
+            subscriptions.some((item) => item.product === Product.EASY_MENU)
+          ) {
             location.isEasyMenuEnabled = false;
             await manager.update(Location, id, { isEasyMenuEnabled: false });
           }

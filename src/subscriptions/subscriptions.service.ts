@@ -27,10 +27,7 @@ import { PaymentProvider } from '../payments/enums/payment-provider.enum';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { PaymentsService } from '../payments/payments.service';
 import { Plan } from '../plans/entities/plan.entity';
-import {
-  Product,
-  productDisplayName,
-} from '../plans/enums/product.enum';
+import { Product, productDisplayName } from '../plans/enums/product.enum';
 import {
   getAdminDemoSubscription,
   isAdminDemoAccount,
@@ -207,7 +204,9 @@ export class SubscriptionsService implements OnModuleInit {
   /**
    * Auto-activates the 2 Day Demo plan when an eligible account adds a location.
    */
-  async grantAdminDemoIfEligible(location: Location): Promise<Subscription | null> {
+  async grantAdminDemoIfEligible(
+    location: Location,
+  ): Promise<Subscription | null> {
     const config = getAdminDemoSubscription();
     const user = this.currentUserUtil.getCurrentUserOrNull();
     if (!config || !user || !isAdminDemoAccount(user, config)) {
@@ -433,9 +432,7 @@ export class SubscriptionsService implements OnModuleInit {
       subscription.id,
     );
     const liveEndDate = live?.endDate ?? null;
-    const defaultStart = liveEndDate
-      ? addDaysToIsoDate(liveEndDate, 1)
-      : today;
+    const defaultStart = liveEndDate ? addDaysToIsoDate(liveEndDate, 1) : today;
     const start = startDate ?? defaultStart;
 
     if (live || start > today) {
@@ -686,10 +683,7 @@ export class SubscriptionsService implements OnModuleInit {
       .update(Subscription)
       .set({ status: SubscriptionStatus.EXPIRED })
       .where('status IN (:...expireStatuses)', {
-        expireStatuses: [
-          SubscriptionStatus.ACTIVE,
-          SubscriptionStatus.QUEUED,
-        ],
+        expireStatuses: [SubscriptionStatus.ACTIVE, SubscriptionStatus.QUEUED],
       })
       .andWhere('"endDate" < :today', { today });
 
@@ -918,8 +912,8 @@ export class SubscriptionsService implements OnModuleInit {
   }
 
   private async dropLegacyOpenSubscriptionIndex(): Promise<void> {
-    const rows: Array<{ indexname: string; indexdef: string }> =
-      await this.subscriptionRepository.query(`
+    const rows: Array<{ indexname: string; indexdef: string }> = await this
+      .subscriptionRepository.query(`
         SELECT indexname, indexdef
         FROM pg_indexes
         WHERE tablename = 'subscriptions'
