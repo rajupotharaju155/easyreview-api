@@ -13,9 +13,12 @@ import {
   slugCandidatesFromName,
   slugWithSuffix,
 } from '../common/utils/slug.util';
+import { HqDeletedFilter } from '../hq/enums/hq-deleted-filter.enum';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { CreateProfileLeadDto } from './dto/create-profile-lead.dto';
 import { CreateProfileLinkDto } from './dto/create-profile-link.dto';
+import { HqProfileSummaryDto } from './dto/hq-profile-summary.dto';
+import { HqProfilesQueryDto } from './dto/hq-profiles-query.dto';
 import {
   ProfileDto,
   ProfileLeadDto,
@@ -392,6 +395,105 @@ export class ProfilesService {
     );
 
     return this.toLeadDto(lead);
+  }
+
+  // ------------------------------------------------------------------
+  // HQ (admin) endpoints
+  // ------------------------------------------------------------------
+
+  /**
+   * Lists profiles globally for HQ. Search matches id, slug, or display name.
+   * `deleted` follows the standard HQ filter (active by default). Links and
+   * leads are aggregated as counts so the payload stays lean.
+   */
+  async findAllForHq(
+    query: HqProfilesQueryDto,
+  ): Promise<PaginatedResponseDto<HqProfileSummaryDto>> {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      deleted = HqDeletedFilter.ACTIVE,
+    } = query;
+    const skip = (page - 1) * limit;
+    const term = search?.trim();
+
+    const qb = this.profileRepository
+      .createQueryBuilder('profile')
+      .leftJoinAndSelect('profile.user', 'user')
+      .orderBy('profile.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (deleted === HqDeletedFilter.DELETED) {
+      qb.withDeleted().andWhere('profile.deletedAt IS NOT NULL');
+    } else if (deleted === HqDeletedFilter.ALL) {
+      qb.withDeleted();
+    }
+
+    if (term) {
+      qb.andWhere(
+        '(profile.id ILIKE :term OR profile.slug ILIKE :term OR profile.displayName ILIKE :term)',
+        { term: `%${term}%` },
+      );
+    }
+
+    const [profiles, total] = await qb.getManyAndCount();
+
+    // Aggregate link + lead counts in one query each so the table doesn't
+    // trigger N+1 lookups when the page is full.
+    const profileIds = profiles.map((profile) => profile.id);
+    const linksCount = await this.countByProfile(this.linkRepository, profileIds);
+    const leadsCount = await this.countByProfile(this.leadRepository, profileIds);
+
+    const data = profiles.map(
+      (profile) =>
+        new HqProfileSummaryDto({
+          id: profile.id,
+          slug: profile.slug,
+          displayName: profile.displayName,
+          designation: profile.designation,
+          companyName: profile.companyName,
+          isPublished: profile.isPublished,
+          coverImageUrl: profile.coverImageUrl,
+          profileImageUrl: profile.profileImageUrl,
+          user: profile.user
+            ? {
+                id: profile.user.id,
+                email: profile.user.email,
+                name: profile.user.name,
+              }
+            : null,
+          linksCount: linksCount.get(profile.id) ?? 0,
+          leadsCount: leadsCount.get(profile.id) ?? 0,
+          createdAt: this.toIsoString(profile.createdAt),
+          updatedAt: this.toIsoString(profile.updatedAt),
+          deletedAt: profile.deletedAt
+            ? this.toIsoString(profile.deletedAt)
+            : null,
+        }),
+    );
+
+    return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  private async countByProfile(
+    repo: Repository<ProfileLink> | Repository<ProfileLead>,
+    profileIds: string[],
+  ): Promise<Map<string, number>> {
+    if (profileIds.length === 0) return new Map();
+    const rows = await repo
+      .createQueryBuilder('row')
+      .select('row.profileId', 'profileId')
+      .addSelect('COUNT(*)', 'count')
+      .where('row.profileId IN (:...profileIds)', { profileIds })
+      .groupBy('row.profileId')
+      .getRawMany<{ profileId: string; count: string }>();
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      map.set(row.profileId, Number(row.count));
+    }
+    return map;
   }
 
   // ------------------------------------------------------------------
