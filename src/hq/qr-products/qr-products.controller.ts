@@ -97,4 +97,3 @@ export class QrProductsController {
     return this.qrProductsService.uploadImage(file);
   }
 }
-

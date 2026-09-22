@@ -43,7 +43,9 @@ export class MenuStorageService {
       throw new BadRequestException('Choose a photo to upload');
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      throw new BadRequestException('Photo is too large. Please use a smaller image.');
+      throw new BadRequestException(
+        'Photo is too large. Please use a smaller image.',
+      );
     }
     if (file.mimetype && !ALLOWED_TYPES.has(file.mimetype)) {
       throw new BadRequestException('Upload a JPEG, PNG, WebP, or GIF photo');

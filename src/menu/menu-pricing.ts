@@ -86,9 +86,7 @@ export function normalizeVariantPrices(
   });
 }
 
-export function minVariantPrice(
-  prices: MenuItemVariantPrice[],
-): number | null {
+export function minVariantPrice(prices: MenuItemVariantPrice[]): number | null {
   if (prices.length === 0) return null;
   return prices.reduce(
     (min, row) => Math.min(min, Number(row.price)),
@@ -102,7 +100,9 @@ export function remapVariantPrices(
   toVariants: MenuPriceVariant[],
 ): MenuItemVariantPrice[] {
   if (toVariants.length === 0) return [];
-  const fromById = new Map(fromVariants.map((variant) => [variant.id, variant]));
+  const fromById = new Map(
+    fromVariants.map((variant) => [variant.id, variant]),
+  );
   const toByName = new Map(
     toVariants.map((variant) => [variant.name.trim().toLowerCase(), variant]),
   );

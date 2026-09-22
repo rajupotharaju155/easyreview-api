@@ -1,8 +1,5 @@
 import { IsIn } from 'class-validator';
-import {
-  ATTENTION_QUEUE_KEYS,
-  type AttentionQueueKey,
-} from '../hq.constants';
+import { ATTENTION_QUEUE_KEYS, type AttentionQueueKey } from '../hq.constants';
 
 export class HqAttentionQueueParamDto {
   @IsIn(ATTENTION_QUEUE_KEYS, {

@@ -3,10 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import {
-  HQ_ADMIN_SUB,
-  HQ_TOKEN_TYPE,
-} from '../../hq/hq.constants';
+import { HQ_ADMIN_SUB, HQ_TOKEN_TYPE } from '../../hq/hq.constants';
 import { User } from '../../users/entities/user.entity';
 
 export function validatePassword(password: string): boolean {

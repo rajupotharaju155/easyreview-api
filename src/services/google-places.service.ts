@@ -26,7 +26,9 @@ export class GooglePlacesService {
   constructor(private readonly configService: ConfigService) {}
 
   async fetchPlaceDetails(placeId: string): Promise<PlaceDetailsSnapshot> {
-    const apiKey = this.configService.get<string>('GOOGLE_MAPS_API_KEY')?.trim();
+    const apiKey = this.configService
+      .get<string>('GOOGLE_MAPS_API_KEY')
+      ?.trim();
     if (!apiKey) {
       throw new ServiceUnavailableException(
         'GOOGLE_MAPS_API_KEY is not configured',
@@ -63,8 +65,7 @@ export class GooglePlacesService {
 
     if (!response.ok) {
       const message =
-        body.error?.message ||
-        `Places API returned ${response.status}`;
+        body.error?.message || `Places API returned ${response.status}`;
       throw new BadGatewayException(
         `Failed to fetch place details: ${message}`,
       );

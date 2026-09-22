@@ -332,7 +332,8 @@ export class MenuService {
       item.description = dto.description?.trim() || null;
     }
     if (dto.isNonVeg !== undefined) item.isNonVeg = dto.isNonVeg;
-    if (dto.isNotAvailable !== undefined) item.isNotAvailable = dto.isNotAvailable;
+    if (dto.isNotAvailable !== undefined)
+      item.isNotAvailable = dto.isNotAvailable;
     const previousImageUrl = item.imageUrl;
     if (dto.imageUrl !== undefined) {
       this.assertImageUrl(dto.imageUrl);
@@ -420,7 +421,10 @@ export class MenuService {
   ): Promise<MenuComboDto> {
     await this.assertLocationOwned(locationId);
     const items = await this.requireOwnedItems(locationId, dto.itemIds);
-    const sortOrder = await this.nextSortOrder(this.comboRepository, locationId);
+    const sortOrder = await this.nextSortOrder(
+      this.comboRepository,
+      locationId,
+    );
 
     const combo = await this.dataSource.transaction(async (manager) => {
       const saved = await manager.save(
@@ -456,7 +460,8 @@ export class MenuService {
     const combo = await this.requireCombo(locationId, comboId);
 
     if (dto.name !== undefined) combo.name = dto.name.trim();
-    if (dto.priceOverride !== undefined) combo.priceOverride = dto.priceOverride;
+    if (dto.priceOverride !== undefined)
+      combo.priceOverride = dto.priceOverride;
 
     const itemIds = dto.itemIds ?? (await this.getComboItemIds(combo.id));
     const items = await this.requireOwnedItems(locationId, itemIds);
@@ -506,7 +511,7 @@ export class MenuService {
       where: { locationId, menuItemId: dto.menuItemId },
     });
     if (existing) {
-      throw new BadRequestException('This item is already in Today\'s Special');
+      throw new BadRequestException("This item is already in Today's Special");
     }
 
     const sortOrder = await this.nextSortOrder(
@@ -536,7 +541,7 @@ export class MenuService {
       where: { id: specialId, locationId },
     });
     if (!special) {
-      throw new NotFoundException('Today\'s Special item not found');
+      throw new NotFoundException("Today's Special item not found");
     }
     await this.specialRepository.delete({ id: special.id });
   }
@@ -668,7 +673,9 @@ export class MenuService {
     };
   }
 
-  private toCategoryDto(category: MenuCategory): Omit<MenuCategoryDto, 'items'> {
+  private toCategoryDto(
+    category: MenuCategory,
+  ): Omit<MenuCategoryDto, 'items'> {
     return {
       id: category.id,
       locationId: category.locationId,
@@ -767,7 +774,8 @@ export class MenuService {
     });
     return (
       categories.find(
-        (category) => category.name.trim().toLowerCase().replace(/\s+/g, ' ') === key,
+        (category) =>
+          category.name.trim().toLowerCase().replace(/\s+/g, ' ') === key,
       ) ?? null
     );
   }
@@ -804,7 +812,9 @@ export class MenuService {
   ): Promise<MenuItem[]> {
     const uniqueIds = [...new Set(itemIds)];
     if (uniqueIds.length !== itemIds.length) {
-      throw new BadRequestException('A combo cannot contain the same item twice');
+      throw new BadRequestException(
+        'A combo cannot contain the same item twice',
+      );
     }
 
     const items = await this.itemRepository.find({
@@ -853,7 +863,11 @@ export class MenuService {
   }
 
   private async applyReorder(
-    repository: Repository<{ id: string; locationId: string; sortOrder: number }>,
+    repository: Repository<{
+      id: string;
+      locationId: string;
+      sortOrder: number;
+    }>,
     locationId: string,
     ids: string[],
     extraWhere?: Record<string, string>,
@@ -955,10 +969,7 @@ export class MenuService {
       };
     }
 
-    if (
-      input.fullPrice == null ||
-      Number.isNaN(Number(input.fullPrice))
-    ) {
+    if (input.fullPrice == null || Number.isNaN(Number(input.fullPrice))) {
       throw new BadRequestException('Price is required');
     }
     this.assertItemPricing(input.isHalfServed, input.halfPrice);
@@ -977,7 +988,10 @@ export class MenuService {
     isHalfServed: boolean,
     halfPrice: number | null | undefined,
   ): void {
-    if (isHalfServed && (halfPrice == null || Number.isNaN(Number(halfPrice)))) {
+    if (
+      isHalfServed &&
+      (halfPrice == null || Number.isNaN(Number(halfPrice)))
+    ) {
       throw new BadRequestException(
         'Half price is required when the item is served as half',
       );

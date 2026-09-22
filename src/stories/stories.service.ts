@@ -96,9 +96,8 @@ export class StoriesService {
     this.validateGenerateDto(dto);
     await this.assertWithinQuota(locationId);
 
-    const { keywords } = await this.aiSettingsService.findPublicForRatingPage(
-      locationId,
-    );
+    const { keywords } =
+      await this.aiSettingsService.findPublicForRatingPage(locationId);
     const composedPrompt = await this.composePrompt(location, dto, keywords);
     const stampText = dto.stampText !== false;
     const brand = this.resolveBrand(location, dto);
@@ -196,10 +195,7 @@ export class StoriesService {
     };
   }
 
-  private brandInstructions(
-    location: Location,
-    dto: GenerateStoryDto,
-  ): string {
+  private brandInstructions(location: Location, dto: GenerateStoryDto): string {
     const stampText = dto.stampText !== false;
     const brand = this.resolveBrand(location, dto);
     if (stampText) {
@@ -279,7 +275,9 @@ export class StoriesService {
     const brand = this.resolveBrand(location, dto);
 
     const details = [
-      brand.name ? `Business name: ${brand.name}` : 'Do not include a business name',
+      brand.name
+        ? `Business name: ${brand.name}`
+        : 'Do not include a business name',
       location.primaryTypeDisplayName
         ? `Category: ${location.primaryTypeDisplayName}`
         : null,
@@ -289,9 +287,7 @@ export class StoriesService {
       brand.phone ? `Phone: ${brand.phone}` : 'Do not include a phone number',
       keywords?.length ? `Keywords: ${keywords.join(', ')}` : null,
       `Template: ${dto.template}`,
-      dto.look
-        ? `Mood: ${dto.look}. ${STORY_LOOK_HINTS[dto.look]}`
-        : null,
+      dto.look ? `Mood: ${dto.look}. ${STORY_LOOK_HINTS[dto.look]}` : null,
       `Picture mode: ${dto.picture ?? 'photos'}. ${STORY_PICTURE_HINTS[dto.picture ?? 'photos']}`,
       dto.festival ? `Festival / occasion: ${dto.festival}` : null,
       dto.offerText ? `Offer text to feature: ${dto.offerText}` : null,
@@ -351,7 +347,9 @@ export class StoriesService {
       festival ? `for ${festival}` : '',
       offer ? `featuring the offer "${offer}"` : '',
       extra ? `Owner direction: ${extra}` : '',
-      dto.look ? `Mood (colour and energy only): ${STORY_LOOK_HINTS[dto.look]}` : '',
+      dto.look
+        ? `Mood (colour and energy only): ${STORY_LOOK_HINTS[dto.look]}`
+        : '',
       STORY_PICTURE_HINTS[picture],
       keywords?.length ? `Visual cues: ${keywords.slice(0, 6).join(', ')}` : '',
       'Invent an original layout. Do not copy a stock template.',

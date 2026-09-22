@@ -54,4 +54,3 @@ export class UpdateQrProductDto {
   @IsBoolean()
   discontinued?: boolean;
 }
-

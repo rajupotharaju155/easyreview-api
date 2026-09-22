@@ -62,4 +62,3 @@ export class QrProduct {
     if (!this.id) this.id = generateId();
   }
 }
-
