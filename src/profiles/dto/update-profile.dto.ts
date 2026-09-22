@@ -1,6 +1,5 @@
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
@@ -81,8 +80,4 @@ export class UpdateProfileDto {
       'Slug can only contain lowercase letters, numbers, and hyphens (no leading, trailing, or repeated hyphens)',
   })
   slug?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isPublished?: boolean;
 }

@@ -76,7 +76,7 @@ export class ProfilesService {
         email: dto.email ?? null,
         coverImageUrl: null,
         profileImageUrl: null,
-        isPublished: false,
+        isPublished: true,
       });
       return manager.save(created);
     });
@@ -129,7 +129,6 @@ export class ProfilesService {
     if (dto.whatsappPhone !== undefined)
       profile.whatsappPhone = dto.whatsappPhone;
     if (dto.email !== undefined) profile.email = dto.email;
-    if (dto.isPublished !== undefined) profile.isPublished = dto.isPublished;
 
     if (dto.slug !== undefined && dto.slug !== profile.slug) {
       const available = await this.isSlugAvailable(
@@ -475,6 +474,51 @@ export class ProfilesService {
     );
 
     return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  /** HQ-only. Customers cannot publish or hide their own card. */
+  async setPublishedForHq(
+    profileId: string,
+    isPublished: boolean,
+  ): Promise<HqProfileSummaryDto> {
+    const profile = await this.profileRepository.findOne({
+      where: { id: profileId },
+      relations: { user: true },
+    });
+    if (!profile) {
+      throw new NotFoundException(`Profile with id "${profileId}" not found`);
+    }
+
+    profile.isPublished = isPublished;
+    await this.profileRepository.save(profile);
+
+    const [linksCount, leadsCount] = await Promise.all([
+      this.countByProfile(this.linkRepository, [profile.id]),
+      this.countByProfile(this.leadRepository, [profile.id]),
+    ]);
+
+    return new HqProfileSummaryDto({
+      id: profile.id,
+      slug: profile.slug,
+      displayName: profile.displayName,
+      designation: profile.designation,
+      companyName: profile.companyName,
+      isPublished: profile.isPublished,
+      coverImageUrl: profile.coverImageUrl,
+      profileImageUrl: profile.profileImageUrl,
+      user: profile.user
+        ? {
+            id: profile.user.id,
+            email: profile.user.email,
+            name: profile.user.name,
+          }
+        : null,
+      linksCount: linksCount.get(profile.id) ?? 0,
+      leadsCount: leadsCount.get(profile.id) ?? 0,
+      createdAt: this.toIsoString(profile.createdAt),
+      updatedAt: this.toIsoString(profile.updatedAt),
+      deletedAt: profile.deletedAt ? this.toIsoString(profile.deletedAt) : null,
+    });
   }
 
   private async countByProfile(

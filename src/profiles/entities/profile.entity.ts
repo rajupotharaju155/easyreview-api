@@ -88,8 +88,8 @@ export class Profile {
   @Column({ type: 'text', nullable: true })
   profileImageUrl: string | null;
 
-  /** Unpublished slugs return 404 so a card can be prepared before it is printed. */
-  @Column({ type: 'boolean', default: false })
+  /** HQ can publish or hide a card. Hidden slugs 404. Customers cannot change this. */
+  @Column({ type: 'boolean', default: true })
   isPublished: boolean;
 
   @OneToMany(() => ProfileLink, (link) => link.profile)
