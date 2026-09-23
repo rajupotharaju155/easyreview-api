@@ -414,6 +414,7 @@ export class PaymentsService {
       orderId: null,
       planId: plan.id,
       locationId: subscription.locationId,
+      profileId: subscription.profileId,
       userId: subscription.userId,
       amount: chargedAmount,
       discountAmount,

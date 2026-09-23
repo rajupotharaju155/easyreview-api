@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Location } from '../locations/entities/location.entity';
 import { PaymentsModule } from '../payments/payments.module';
 import { Plan } from '../plans/entities/plan.entity';
+import { Profile } from '../profiles/entities/profile.entity';
 import { Subscription } from './entities/subscription.entity';
 import { HqSubscriptionsController } from './hq-subscriptions.controller';
 import { SubscriptionsController } from './subscriptions.controller';
@@ -10,7 +11,7 @@ import { SubscriptionsService } from './subscriptions.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Subscription, Location, Plan]),
+    TypeOrmModule.forFeature([Subscription, Location, Plan, Profile]),
     forwardRef(() => PaymentsModule),
   ],
   controllers: [SubscriptionsController, HqSubscriptionsController],

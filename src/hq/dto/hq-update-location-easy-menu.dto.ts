@@ -1,11 +1,7 @@
-import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
+import { IsEnum } from 'class-validator';
 import { MenuStyle } from '../../menu/enums/menu-style.enum';
 
-export class HqUpdateLocationEasyMenuDto {
-  @IsBoolean()
-  isEasyMenuEnabled: boolean;
-
-  @IsOptional()
+export class HqUpdateLocationMenuStyleDto {
   @IsEnum(MenuStyle)
-  menuStyle?: MenuStyle;
+  menuStyle: MenuStyle;
 }

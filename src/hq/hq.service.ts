@@ -38,8 +38,7 @@ import { HqCreateQrBatchDto } from './dto/hq-create-qr-batch.dto';
 import { HqLocationsQueryDto } from './dto/hq-locations-query.dto';
 import { HqOrdersQueryDto } from './dto/hq-orders-query.dto';
 import { HqQrCodesQueryDto } from './dto/hq-qr-codes-query.dto';
-import { HqUpdateLocationEasyMenuDto } from './dto/hq-update-location-easy-menu.dto';
-import { HqUpdateLocationEasyStoryDto } from './dto/hq-update-location-easy-story.dto';
+import { HqUpdateLocationMenuStyleDto } from './dto/hq-update-location-easy-menu.dto';
 import { HqUpdateLocationSlugDto } from './dto/hq-update-location-slug.dto';
 import { HqUpdateOrderDto } from './dto/hq-update-order.dto';
 import { HqUpdateQrPrintedDto } from './dto/hq-update-qr-printed.dto';
@@ -95,7 +94,7 @@ export type HqSubscriptionQueueCounts = Record<SubscriptionQueueKey, number>;
 
 export type HqSubscriptionQueueItem = {
   id: string;
-  locationId: string;
+  locationId: string | null;
   locationName: string | null;
   locationCity: string | null;
   locationDeleted: boolean;
@@ -120,7 +119,7 @@ export type HqAttentionLocation = {
 
 export type HqAttentionSubscription = {
   id: string;
-  locationId: string;
+  locationId: string | null;
   locationName: string | null;
   planName: string | null;
   startDate: string | null;
@@ -133,7 +132,7 @@ export type HqAttentionPayment = {
   amount: number;
   currency: string;
   provider: string | null;
-  locationId: string;
+  locationId: string | null;
   locationName: string | null;
   orderId: string | null;
   createdAt: string;
@@ -409,7 +408,8 @@ export class HqService {
     return this.subscriptionRepository
       .createQueryBuilder('subscription')
       .innerJoinAndSelect('subscription.plan', 'plan')
-      .innerJoinAndSelect('subscription.location', 'location')
+      .leftJoinAndSelect('subscription.location', 'location')
+      .leftJoinAndSelect('subscription.profile', 'profile')
       .where('subscription.status IN (:...liveStatuses)', {
         liveStatuses: LIVE_SUBSCRIPTION_STATUSES,
       })
@@ -430,10 +430,14 @@ export class HqService {
       .withDeleted()
       .innerJoinAndSelect('subscription.plan', 'plan')
       .leftJoinAndSelect('subscription.location', 'location')
+      .leftJoinAndSelect('subscription.profile', 'profile')
       .leftJoin(
         Subscription,
         'liveSub',
-        `liveSub.locationId = subscription.locationId AND liveSub.product = subscription.product AND ${LIVE_SUBSCRIPTION_SQL('liveSub')}`,
+        `(
+          (subscription.locationId IS NOT NULL AND liveSub.locationId = subscription.locationId)
+          OR (subscription.profileId IS NOT NULL AND liveSub.profileId = subscription.profileId)
+        ) AND liveSub.product = subscription.product AND ${LIVE_SUBSCRIPTION_SQL('liveSub')}`,
         { liveStatuses: LIVE_SUBSCRIPTION_STATUSES, today },
       )
       .where('liveSub.id IS NULL')
@@ -457,6 +461,7 @@ export class HqService {
       .withDeleted()
       .innerJoinAndSelect('subscription.plan', 'plan')
       .leftJoinAndSelect('subscription.location', 'location')
+      .leftJoinAndSelect('subscription.profile', 'profile')
       .where('subscription.status IN (:...openStatuses)', {
         openStatuses: LIVE_SUBSCRIPTION_STATUSES,
       })
@@ -482,6 +487,7 @@ export class HqService {
       .withDeleted()
       .innerJoinAndSelect('subscription.plan', 'plan')
       .leftJoinAndSelect('subscription.location', 'location')
+      .leftJoinAndSelect('subscription.profile', 'profile')
       .where('subscription.status IN (:...openStatuses)', {
         openStatuses: LIVE_SUBSCRIPTION_STATUSES,
       })
@@ -539,7 +545,8 @@ export class HqService {
     return {
       id: subscription.id,
       locationId: subscription.locationId,
-      locationName: subscription.location?.name ?? null,
+      locationName:
+        subscription.location?.name ?? subscription.profile?.displayName ?? null,
       planName: subscription.plan
         ? `${productDisplayName(subscription.product)} · ${subscription.plan.name}`
         : null,
@@ -555,10 +562,12 @@ export class HqService {
     return {
       id: subscription.id,
       locationId: subscription.locationId,
-      locationName: subscription.location?.name ?? null,
+      locationName:
+        subscription.location?.name ?? subscription.profile?.displayName ?? null,
       locationCity: subscription.location?.city ?? null,
-      locationDeleted:
-        !subscription.location || Boolean(subscription.location.deletedAt),
+      locationDeleted: subscription.profileId
+        ? !subscription.profile || Boolean(subscription.profile.deletedAt)
+        : !subscription.location || Boolean(subscription.location.deletedAt),
       product: subscription.product,
       planName: subscription.plan?.name ?? null,
       planDurationDays: subscription.plan?.durationDays ?? null,
@@ -772,12 +781,6 @@ export class HqService {
         });
         if (subscriptions.length > 0) {
           await manager.delete(Subscription, { locationId: id });
-          if (
-            subscriptions.some((item) => item.product === Product.EASY_MENU)
-          ) {
-            location.isEasyMenuEnabled = false;
-            await manager.update(Location, id, { isEasyMenuEnabled: false });
-          }
         }
       }
       await manager.softDelete(Location, id);
@@ -817,24 +820,12 @@ export class HqService {
     return this.locationRepository.save(location);
   }
 
-  async updateLocationEasyMenu(
+  async updateLocationMenuStyle(
     id: string,
-    dto: HqUpdateLocationEasyMenuDto,
+    dto: HqUpdateLocationMenuStyleDto,
   ): Promise<Location> {
     const location = await this.findLocationById(id);
-    location.isEasyMenuEnabled = dto.isEasyMenuEnabled;
-    if (dto.menuStyle) {
-      location.menuStyle = dto.menuStyle;
-    }
-    return this.locationRepository.save(location);
-  }
-
-  async updateLocationEasyStory(
-    id: string,
-    dto: HqUpdateLocationEasyStoryDto,
-  ): Promise<Location> {
-    const location = await this.findLocationById(id);
-    location.isEasyStoryEnabled = dto.isEasyStoryEnabled;
+    location.menuStyle = dto.menuStyle;
     return this.locationRepository.save(location);
   }
 

@@ -6,4 +6,9 @@ export class SubscriptionsQueryDto extends PaginationDto {
   @IsString()
   @MinLength(1)
   locationId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  profileId?: string;
 }

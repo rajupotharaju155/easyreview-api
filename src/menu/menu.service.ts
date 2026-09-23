@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -145,7 +144,6 @@ export class MenuService {
         'state',
         'phoneNumber',
         'formattedAddress',
-        'isEasyMenuEnabled',
         'menuStyle',
       ],
     });
@@ -153,7 +151,11 @@ export class MenuService {
     if (!location || !location.slug) {
       throw new NotFoundException(`Menu for slug "${slug}" not found`);
     }
-    if (!(await this.ensureEasyMenuLive(location))) {
+    const live = await this.subscriptionsService.hasActiveForLocation(
+      location.id,
+      Product.EASY_MENU,
+    );
+    if (!live) {
       throw new NotFoundException(`Menu for slug "${slug}" not found`);
     }
 
@@ -724,7 +726,6 @@ export class MenuService {
         'state',
         'phoneNumber',
         'formattedAddress',
-        'isEasyMenuEnabled',
         'menuStyle',
       ],
     });
@@ -733,22 +734,7 @@ export class MenuService {
       throw new NotFoundException(`Location with id "${locationId}" not found`);
     }
 
-    if (!(await this.ensureEasyMenuLive(location))) {
-      throw new ForbiddenException('EasyMenu is not enabled for this location');
-    }
-
     return location;
-  }
-
-  private async ensureEasyMenuLive(location: Location): Promise<boolean> {
-    if (location.isEasyMenuEnabled) return true;
-    const live = await this.subscriptionsService.hasActiveForLocation(
-      location.id,
-      Product.EASY_MENU,
-    );
-    if (!live) return false;
-    location.isEasyMenuEnabled = true;
-    return true;
   }
 
   private async requireCategory(

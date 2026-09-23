@@ -11,6 +11,11 @@ export class HqSubscriptionsQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  profileId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
   userId?: string;
 
   @IsOptional()

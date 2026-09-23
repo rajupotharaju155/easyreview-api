@@ -5,6 +5,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 function trimString({ value }: { value: unknown }): unknown {
@@ -12,9 +13,15 @@ function trimString({ value }: { value: unknown }): unknown {
 }
 
 export class CreateSubscriptionDto {
+  @ValidateIf((dto: CreateSubscriptionDto) => !dto.profileId)
   @IsString()
   @MinLength(1)
-  locationId: string;
+  locationId?: string;
+
+  @ValidateIf((dto: CreateSubscriptionDto) => !dto.locationId)
+  @IsString()
+  @MinLength(1)
+  profileId?: string;
 
   @IsString()
   @MinLength(1)

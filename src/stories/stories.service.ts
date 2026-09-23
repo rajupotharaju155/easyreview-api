@@ -14,6 +14,8 @@ import { MoreThanOrEqual, Repository } from 'typeorm';
 import { AiSettingsService } from '../ai-settings/ai-settings.service';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import { Product } from '../plans/enums/product.enum';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { todayIst } from '../subscriptions/utils/ist-date.util';
 import { GenerateStoryDto } from './dto/generate-story.dto';
 import { StoryGeneration } from './entities/story-generation.entity';
@@ -66,6 +68,7 @@ export class StoriesService {
     private readonly configService: ConfigService,
     private readonly aiSettingsService: AiSettingsService,
     private readonly storyStorage: StoryStorageService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async listForOwnedLocation(locationId: string): Promise<{
@@ -93,6 +96,15 @@ export class StoriesService {
     dto: GenerateStoryDto,
   ): Promise<{ story: StoryDto; quota: StoryQuota }> {
     const location = await this.assertLocationOwned(locationId);
+    const live = await this.subscriptionsService.hasActiveForLocation(
+      locationId,
+      Product.EASY_STORY,
+    );
+    if (!live) {
+      throw new ForbiddenException(
+        'This location needs an active EasyStory plan',
+      );
+    }
     this.validateGenerateDto(dto);
     await this.assertWithinQuota(locationId);
 
@@ -425,18 +437,11 @@ export class StoriesService {
         'phoneNumber',
         'formattedAddress',
         'primaryTypeDisplayName',
-        'isEasyStoryEnabled',
       ],
     });
 
     if (!location) {
       throw new NotFoundException(`Location with id "${locationId}" not found`);
-    }
-
-    if (!location.isEasyStoryEnabled) {
-      throw new ForbiddenException(
-        'EasyStory is not enabled for this location',
-      );
     }
 
     return location;
