@@ -38,18 +38,12 @@ export class Location {
   @Column({ type: 'varchar', length: 255, nullable: true })
   slug: string | null;
 
-  @Column({ type: 'boolean', default: false })
-  isEasyMenuEnabled: boolean;
-
   @Column({
     type: 'varchar',
     length: 32,
     default: MenuStyle.RESTAURANT_STYLE,
   })
   menuStyle: MenuStyle;
-
-  @Column({ type: 'boolean', default: false })
-  isEasyStoryEnabled: boolean;
 
   @Index()
   @Column({ type: 'varchar', length: 255 })

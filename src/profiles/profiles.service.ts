@@ -14,6 +14,8 @@ import {
   slugWithSuffix,
 } from '../common/utils/slug.util';
 import { HqDeletedFilter } from '../hq/enums/hq-deleted-filter.enum';
+import { Product } from '../plans/enums/product.enum';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { CreateProfileLeadDto } from './dto/create-profile-lead.dto';
 import { CreateProfileLinkDto } from './dto/create-profile-link.dto';
@@ -53,6 +55,7 @@ export class ProfilesService {
     private readonly dataSource: DataSource,
     private readonly currentUserUtil: CurrentUserUtil,
     private readonly profileStorage: ProfileStorageService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   // ------------------------------------------------------------------
@@ -340,6 +343,9 @@ export class ProfilesService {
     if (!profile || !profile.slug) {
       throw new NotFoundException(`Profile with slug "${slug}" not found`);
     }
+    if (!(await this.hasLiveProfilePlan(profile.id))) {
+      throw new NotFoundException(`Profile with slug "${slug}" not found`);
+    }
 
     const links = await this.linkRepository.find({
       where: { profileId: profile.id },
@@ -379,6 +385,9 @@ export class ProfilesService {
       select: ['id'],
     });
     if (!profile) {
+      throw new NotFoundException(`Profile with slug "${slug}" not found`);
+    }
+    if (!(await this.hasLiveProfilePlan(profile.id))) {
       throw new NotFoundException(`Profile with slug "${slug}" not found`);
     }
 
@@ -442,35 +451,19 @@ export class ProfilesService {
     // Aggregate link + lead counts in one query each so the table doesn't
     // trigger N+1 lookups when the page is full.
     const profileIds = profiles.map((profile) => profile.id);
-    const linksCount = await this.countByProfile(this.linkRepository, profileIds);
-    const leadsCount = await this.countByProfile(this.leadRepository, profileIds);
+    const [linksCount, leadsCount, subscriptions] = await Promise.all([
+      this.countByProfile(this.linkRepository, profileIds),
+      this.countByProfile(this.leadRepository, profileIds),
+      this.subscriptionsService.findOpenForProfiles(profileIds),
+    ]);
 
-    const data = profiles.map(
-      (profile) =>
-        new HqProfileSummaryDto({
-          id: profile.id,
-          slug: profile.slug,
-          displayName: profile.displayName,
-          designation: profile.designation,
-          companyName: profile.companyName,
-          isPublished: profile.isPublished,
-          coverImageUrl: profile.coverImageUrl,
-          profileImageUrl: profile.profileImageUrl,
-          user: profile.user
-            ? {
-                id: profile.user.id,
-                email: profile.user.email,
-                name: profile.user.name,
-              }
-            : null,
-          linksCount: linksCount.get(profile.id) ?? 0,
-          leadsCount: leadsCount.get(profile.id) ?? 0,
-          createdAt: this.toIsoString(profile.createdAt),
-          updatedAt: this.toIsoString(profile.updatedAt),
-          deletedAt: profile.deletedAt
-            ? this.toIsoString(profile.deletedAt)
-            : null,
-        }),
+    const data = profiles.map((profile) =>
+      this.toHqSummary(
+        profile,
+        linksCount.get(profile.id) ?? 0,
+        leadsCount.get(profile.id) ?? 0,
+        subscriptions.get(profile.id) ?? null,
+      ),
     );
 
     return new PaginatedResponseDto(data, total, page, limit);
@@ -492,11 +485,26 @@ export class ProfilesService {
     profile.isPublished = isPublished;
     await this.profileRepository.save(profile);
 
-    const [linksCount, leadsCount] = await Promise.all([
+    const [linksCount, leadsCount, subscriptions] = await Promise.all([
       this.countByProfile(this.linkRepository, [profile.id]),
       this.countByProfile(this.leadRepository, [profile.id]),
+      this.subscriptionsService.findOpenForProfiles([profile.id]),
     ]);
 
+    return this.toHqSummary(
+      profile,
+      linksCount.get(profile.id) ?? 0,
+      leadsCount.get(profile.id) ?? 0,
+      subscriptions.get(profile.id) ?? null,
+    );
+  }
+
+  private toHqSummary(
+    profile: Profile,
+    linksCount: number,
+    leadsCount: number,
+    subscription: HqProfileSummaryDto['subscription'],
+  ): HqProfileSummaryDto {
     return new HqProfileSummaryDto({
       id: profile.id,
       slug: profile.slug,
@@ -513,8 +521,9 @@ export class ProfilesService {
             name: profile.user.name,
           }
         : null,
-      linksCount: linksCount.get(profile.id) ?? 0,
-      leadsCount: leadsCount.get(profile.id) ?? 0,
+      linksCount,
+      leadsCount,
+      subscription,
       createdAt: this.toIsoString(profile.createdAt),
       updatedAt: this.toIsoString(profile.updatedAt),
       deletedAt: profile.deletedAt ? this.toIsoString(profile.deletedAt) : null,
@@ -543,6 +552,13 @@ export class ProfilesService {
   // ------------------------------------------------------------------
   // Helpers
   // ------------------------------------------------------------------
+
+  private async hasLiveProfilePlan(profileId: string): Promise<boolean> {
+    return this.subscriptionsService.hasActiveForProfile(
+      profileId,
+      Product.EASY_PROFILE,
+    );
+  }
 
   private async requireOwnedProfile(profileId: string): Promise<Profile> {
     const userId = this.currentUserUtil.getCurrentUserId();

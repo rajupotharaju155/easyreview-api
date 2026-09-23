@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { Location } from '../../locations/entities/location.entity';
+import { Profile } from '../../profiles/entities/profile.entity';
 import { Order } from '../../orders/entities/order.entity';
 import { Plan } from '../../plans/entities/plan.entity';
 import { Subscription } from '../../subscriptions/entities/subscription.entity';
@@ -66,12 +67,19 @@ export class Payment {
   @JoinColumn({ name: 'planId' })
   plan: Plan | null;
 
-  @Column({ type: 'varchar', length: ID_LENGTH })
-  locationId: string;
+  @Column({ type: 'varchar', length: ID_LENGTH, nullable: true })
+  locationId: string | null;
 
-  @ManyToOne(() => Location, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Location, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'locationId' })
-  location: Location;
+  location: Location | null;
+
+  @Column({ type: 'varchar', length: ID_LENGTH, nullable: true })
+  profileId: string | null;
+
+  @ManyToOne(() => Profile, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'profileId' })
+  profile: Profile | null;
 
   @Column({ type: 'varchar', length: ID_LENGTH })
   userId: string;

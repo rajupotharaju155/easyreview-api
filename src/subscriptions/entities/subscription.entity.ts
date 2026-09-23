@@ -1,5 +1,6 @@
 import {
   BeforeInsert,
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -13,22 +14,36 @@ import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { Location } from '../../locations/entities/location.entity';
 import { Plan } from '../../plans/entities/plan.entity';
 import { Product } from '../../plans/enums/product.enum';
+import { Profile } from '../../profiles/entities/profile.entity';
 import { User } from '../../users/entities/user.entity';
 import { SubscriptionSource } from '../enums/subscription-source.enum';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
 
 @Entity('subscriptions')
+@Check(
+  'CHK_subscriptions_one_subject',
+  `("locationId" IS NOT NULL AND "profileId" IS NULL) OR ("locationId" IS NULL AND "profileId" IS NOT NULL)`,
+)
 @Index(['locationId'])
+@Index(['profileId'])
 @Index(['userId'])
 @Index(['status'])
 @Index(['product'])
 @Index('UQ_subscriptions_open_location_product', ['locationId', 'product'], {
   unique: true,
-  where: `"status" IN ('pending_payment', 'active')`,
+  where: `"locationId" IS NOT NULL AND "status" IN ('pending_payment', 'active')`,
 })
 @Index('UQ_subscriptions_queued_location_product', ['locationId', 'product'], {
   unique: true,
-  where: `"status" = 'queued'`,
+  where: `"locationId" IS NOT NULL AND "status" = 'queued'`,
+})
+@Index('UQ_subscriptions_open_profile_product', ['profileId', 'product'], {
+  unique: true,
+  where: `"profileId" IS NOT NULL AND "status" IN ('pending_payment', 'active')`,
+})
+@Index('UQ_subscriptions_queued_profile_product', ['profileId', 'product'], {
+  unique: true,
+  where: `"profileId" IS NOT NULL AND "status" = 'queued'`,
 })
 export class Subscription {
   constructor(data: Partial<Subscription>) {
@@ -38,12 +53,19 @@ export class Subscription {
   @PrimaryColumn({ type: 'varchar', length: ID_LENGTH })
   id: string;
 
-  @Column({ type: 'varchar', length: ID_LENGTH })
-  locationId: string;
+  @Column({ type: 'varchar', length: ID_LENGTH, nullable: true })
+  locationId: string | null;
 
-  @ManyToOne(() => Location, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Location, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'locationId' })
-  location: Location;
+  location: Location | null;
+
+  @Column({ type: 'varchar', length: ID_LENGTH, nullable: true })
+  profileId: string | null;
+
+  @ManyToOne(() => Profile, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'profileId' })
+  profile: Profile | null;
 
   @Column({ type: 'varchar', length: ID_LENGTH })
   userId: string;

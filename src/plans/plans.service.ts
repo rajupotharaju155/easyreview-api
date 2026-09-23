@@ -29,9 +29,11 @@ export class PlansService implements OnModuleInit {
     await this.seedDefaultPlans();
   }
 
-  async findActiveCatalog(): Promise<Plan[]> {
+  async findActiveCatalog(
+    product: Product = Product.EASY_REVIEW,
+  ): Promise<Plan[]> {
     return this.planRepository.find({
-      where: { isActive: true, product: Product.EASY_REVIEW },
+      where: { isActive: true, product },
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
   }

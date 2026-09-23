@@ -21,6 +21,21 @@ export const EASY_REVIEW_PLAN_FEATURES: PlanFeature[] = [
   planFeature('private_feedback', 'Private feedback gate', true),
 ];
 
+export const EASY_STORY_PLAN_FEATURES: PlanFeature[] = [
+  planFeature('admin_panel', 'Admin Panel Access', true),
+  planFeature('story_posters', 'WhatsApp and Instagram story posters', true),
+  planFeature('story_generate', 'Generate story', true),
+  planFeature('priority_whatsapp', 'Priority WhatsApp support', true),
+];
+
+export const EASY_PROFILE_PLAN_FEATURES: PlanFeature[] = [
+  planFeature('admin_panel', 'Admin Panel Access', true),
+  planFeature('public_card', 'Public profile card', true),
+  planFeature('profile_qr', 'Profile QR and link', true),
+  planFeature('lead_capture', 'Lead capture', true),
+  planFeature('priority_whatsapp', 'Priority WhatsApp support', true),
+];
+
 export const EASY_MENU_PLAN_FEATURES: PlanFeature[] = [
   planFeature('admin_panel', 'Admin Panel Access', true),
   planFeature('digital_menu', 'Digital menu page', true),
