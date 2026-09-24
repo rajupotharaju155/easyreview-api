@@ -128,6 +128,7 @@ export class PaymentsService {
       search,
       excludeZeroAmount,
       locationId,
+      profileId,
       userId,
       subscriptionId,
       orderId,
@@ -147,6 +148,9 @@ export class PaymentsService {
     if (provider) qb.andWhere('payment.provider = :provider', { provider });
     if (locationId) {
       qb.andWhere('payment.locationId = :locationId', { locationId });
+    }
+    if (profileId) {
+      qb.andWhere('payment.profileId = :profileId', { profileId });
     }
     if (userId) qb.andWhere('payment.userId = :userId', { userId });
     if (subscriptionId) {

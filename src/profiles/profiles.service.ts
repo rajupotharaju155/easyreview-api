@@ -15,11 +15,15 @@ import {
 } from '../common/utils/slug.util';
 import { HqDeletedFilter } from '../hq/enums/hq-deleted-filter.enum';
 import { Product } from '../plans/enums/product.enum';
+import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { User } from '../users/entities/user.entity';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { CreateProfileLeadDto } from './dto/create-profile-lead.dto';
 import { CreateProfileLinkDto } from './dto/create-profile-link.dto';
+import { HqProfileDetailDto } from './dto/hq-profile-detail.dto';
 import { HqProfileSummaryDto } from './dto/hq-profile-summary.dto';
+import { TransferProfileDto } from './dto/transfer-profile.dto';
 import { HqProfilesQueryDto } from './dto/hq-profiles-query.dto';
 import {
   ProfileDto,
@@ -52,6 +56,8 @@ export class ProfilesService {
     private readonly linkRepository: Repository<ProfileLink>,
     @InjectRepository(ProfileLead)
     private readonly leadRepository: Repository<ProfileLead>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly currentUserUtil: CurrentUserUtil,
     private readonly profileStorage: ProfileStorageService,
@@ -421,6 +427,7 @@ export class ProfilesService {
       page = 1,
       limit = 10,
       search,
+      userId,
       deleted = HqDeletedFilter.ACTIVE,
     } = query;
     const skip = (page - 1) * limit;
@@ -437,6 +444,10 @@ export class ProfilesService {
       qb.withDeleted().andWhere('profile.deletedAt IS NOT NULL');
     } else if (deleted === HqDeletedFilter.ALL) {
       qb.withDeleted();
+    }
+
+    if (userId?.trim()) {
+      qb.andWhere('profile.userId = :userId', { userId: userId.trim() });
     }
 
     if (term) {
@@ -467,6 +478,127 @@ export class ProfilesService {
     );
 
     return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  /** Full card for the HQ detail page, including soft-deleted rows. */
+  async findOneForHq(profileId: string): Promise<HqProfileDetailDto> {
+    const profile = await this.profileRepository.findOne({
+      where: { id: profileId },
+      withDeleted: true,
+    });
+    if (!profile) {
+      throw new NotFoundException(`Profile with id "${profileId}" not found`);
+    }
+
+    const [links, linksCount, leadsCount] = await Promise.all([
+      this.linkRepository.find({
+        where: { profileId: profile.id },
+        order: { sortOrder: 'ASC', createdAt: 'ASC' },
+      }),
+      this.countByProfile(this.linkRepository, [profile.id]),
+      this.countByProfile(this.leadRepository, [profile.id]),
+    ]);
+
+    return new HqProfileDetailDto({
+      id: profile.id,
+      userId: profile.userId,
+      slug: profile.slug,
+      displayName: profile.displayName,
+      designation: profile.designation,
+      companyName: profile.companyName,
+      bio: profile.bio,
+      phone: profile.phone,
+      whatsappPhone: profile.whatsappPhone,
+      email: profile.email,
+      coverImageUrl: profile.coverImageUrl,
+      profileImageUrl: profile.profileImageUrl,
+      isPublished: profile.isPublished,
+      links: links.map((link) => ({
+        id: link.id,
+        type: link.type,
+        label: link.label,
+        url: link.url,
+        sortOrder: link.sortOrder,
+        createdAt: this.toIsoString(link.createdAt),
+        updatedAt: this.toIsoString(link.updatedAt),
+      })),
+      linksCount: linksCount.get(profile.id) ?? 0,
+      leadsCount: leadsCount.get(profile.id) ?? 0,
+      createdAt: this.toIsoString(profile.createdAt),
+      updatedAt: this.toIsoString(profile.updatedAt),
+      deletedAt: profile.deletedAt ? this.toIsoString(profile.deletedAt) : null,
+    });
+  }
+
+  /**
+   * Transfers a profile and its subscriptions to a different user.
+   * Mirrors location transfer: the card and every subscription move together.
+   */
+  async transferForHq(
+    profileId: string,
+    dto: TransferProfileDto,
+  ): Promise<HqProfileDetailDto> {
+    const profile = await this.profileRepository.findOne({
+      where: { id: profileId },
+      withDeleted: true,
+    });
+    if (!profile) {
+      throw new NotFoundException(`Profile with id "${profileId}" not found`);
+    }
+    if (profile.deletedAt) {
+      throw new ConflictException('Deleted profiles cannot be transferred');
+    }
+
+    const targetUserId = dto.userId.trim();
+    if (profile.userId === targetUserId) {
+      throw new ConflictException(
+        'Profile already belongs to the selected user',
+      );
+    }
+    const targetUser = await this.userRepository.findOne({
+      where: { id: targetUserId },
+    });
+    if (!targetUser) {
+      throw new NotFoundException(`User with id "${targetUserId}" not found`);
+    }
+
+    await this.profileRepository.manager.transaction(async (manager) => {
+      profile.userId = targetUserId;
+      await manager.save(profile);
+      await manager.update(
+        Subscription,
+        { profileId },
+        { userId: targetUserId },
+      );
+    });
+
+    return this.findOneForHq(profileId);
+  }
+
+  /**
+   * Soft-deletes a profile from HQ. Optionally hard-deletes its subscriptions
+   * (and their related payments via FK cascade). The slug stays reserved.
+   */
+  async deleteForHq(
+    profileId: string,
+    deleteSubscriptions = false,
+  ): Promise<HqProfileDetailDto> {
+    const profile = await this.profileRepository.findOne({
+      where: { id: profileId },
+      withDeleted: true,
+    });
+    if (!profile) {
+      throw new NotFoundException(`Profile with id "${profileId}" not found`);
+    }
+
+    await this.profileRepository.manager.transaction(async (manager) => {
+      if (deleteSubscriptions) {
+        await manager.delete(Subscription, { profileId });
+      }
+      await manager.softDelete(Profile, profileId);
+    });
+
+    return this.findOneForHq(profileId);
   }
 
   /** HQ-only. Customers cannot publish or hide their own card. */

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { User } from '../users/entities/user.entity';
 import { ProfileLead } from './entities/profile-lead.entity';
 import { ProfileLink } from './entities/profile-link.entity';
 import { Profile } from './entities/profile.entity';
@@ -12,7 +13,7 @@ import { PublicProfilesController } from './public-profiles.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Profile, ProfileLink, ProfileLead]),
+    TypeOrmModule.forFeature([Profile, ProfileLink, ProfileLead, User]),
     SubscriptionsModule,
   ],
   controllers: [
