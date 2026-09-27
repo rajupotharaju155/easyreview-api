@@ -10,6 +10,7 @@ import { Payment } from './entities/payment.entity';
 import { HqPaymentsController } from './hq-payments.controller';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { RazorpayClient } from './razorpay.client';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { PaymentsService } from './payments.service';
     forwardRef(() => SubscriptionsModule),
   ],
   controllers: [PaymentsController, HqPaymentsController],
-  providers: [PaymentsService],
+  providers: [PaymentsService, RazorpayClient],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}

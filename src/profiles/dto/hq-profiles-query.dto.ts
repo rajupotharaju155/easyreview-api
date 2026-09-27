@@ -20,6 +20,12 @@ export class HqProfilesQueryDto extends PaginationDto {
   search?: string;
 
   @IsOptional()
+  @Transform(trimString)
+  @IsString()
+  @MinLength(1)
+  userId?: string;
+
+  @IsOptional()
   @IsEnum(HqDeletedFilter)
   deleted?: HqDeletedFilter = HqDeletedFilter.ACTIVE;
 }

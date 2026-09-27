@@ -56,10 +56,12 @@ function getEnvFilePath(): string {
   }
 }
 
-const envFilePath = getEnvFilePath();
+const modeEnvFile = getEnvFilePath();
+// Mode file wins. `.env` fills anything it does not set (local Razorpay keys).
+const envFiles = [modeEnvFile, '.env'].filter((file) => existsSync(file));
 // K_SERVICE is set automatically on Cloud Run.
-const ignoreEnvFile =
-  Boolean(process.env.K_SERVICE) || !existsSync(envFilePath);
+const ignoreEnvFile = Boolean(process.env.K_SERVICE) || envFiles.length === 0;
+const envFilePath = envFiles.length > 0 ? envFiles : modeEnvFile;
 
 @Module({
   imports: [
