@@ -55,6 +55,14 @@ import {
   todayIst,
 } from './utils/ist-date.util';
 
+export type CheckoutContext = {
+  plan: Plan;
+  location: Location | null;
+  profile: Profile | null;
+  pendingSubscription: Subscription | null;
+  hasOpenSubscription: boolean;
+};
+
 @Injectable()
 export class SubscriptionsService implements OnModuleInit {
   constructor(
@@ -116,7 +124,9 @@ export class SubscriptionsService implements OnModuleInit {
    * then queued. Used by the HQ profiles table so Create subscription is hidden
    * once a plan already exists.
    */
-  async findOpenForProfiles(profileIds: string[]): Promise<
+  async findOpenForProfiles(
+    profileIds: string[],
+  ): Promise<
     Map<
       string,
       { id: string; status: SubscriptionStatus; planName: string | null }
@@ -224,11 +234,110 @@ export class SubscriptionsService implements OnModuleInit {
     });
   }
 
+  /**
+   * Loads the plan and the owned location or profile for checkout.
+   * Returns any unpaid subscription and whether an active or queued plan
+   * already exists. The only write is subscriptions.planId when the user
+   * switches plan before paying.
+   */
+  async resolveCheckout(dto: {
+    planId: string;
+    locationId?: string;
+    profileId?: string;
+  }): Promise<CheckoutContext> {
+    const userId = this.currentUserUtil.getCurrentUserId();
+    // Location or profile must belong to the signed-in user.
+    const target = await this.resolveCreateTarget(dto, userId);
+    const plan = await this.findPlan(dto.planId);
+    if (!plan.isActive) {
+      throw new BadRequestException(`Plan "${plan.code}" is not active`);
+    }
+    // Zero-amount plans are assigned by HQ, not sold in checkout.
+    if (plan.amount <= 0) {
+      throw new BadRequestException('This plan cannot be purchased online');
+    }
+
+    const product = plan.product ?? Product.EASY_REVIEW;
+    const subject = this.assertPlanSubject(
+      product,
+      target.location,
+      target.profile,
+    );
+    // Unpaid checkout already started for this location/profile and product.
+    const pendingSubscription = await this.subscriptionRepository.findOne({
+      where: {
+        ...subjectWhere(subject),
+        product,
+        userId,
+        status: SubscriptionStatus.PENDING_PAYMENT,
+      },
+    });
+    // User picked a different plan before paying: update planId only.
+    if (pendingSubscription && pendingSubscription.planId !== plan.id) {
+      pendingSubscription.planId = plan.id;
+      await this.subscriptionRepository.save(pendingSubscription);
+    }
+
+    // Active or queued means upgrade: do not insert another pending_payment row.
+    const openSubscription = await this.subscriptionRepository.findOne({
+      where: {
+        ...subjectWhere(subject),
+        product,
+        status: In([SubscriptionStatus.ACTIVE, SubscriptionStatus.QUEUED]),
+      },
+    });
+
+    return {
+      plan,
+      location: target.location ?? null,
+      profile: target.profile ?? null,
+      pendingSubscription,
+      hasOpenSubscription: Boolean(openSubscription),
+    };
+  }
+
+  /**
+   * Creates the subscription for an upgrade after Razorpay succeeds.
+   * The new row is queued to start the day after the current plan ends.
+   * Reuses the existing payments row instead of inserting a second one.
+   */
+  async activateUpgradeCheckout(payment: Payment): Promise<Subscription> {
+    if (!payment.planId) {
+      throw new BadRequestException('Checkout payment is missing a plan');
+    }
+    const plan = await this.findPlan(payment.planId);
+    const target = await this.resolveCreateTarget(
+      {
+        locationId: payment.locationId ?? undefined,
+        profileId: payment.profileId ?? undefined,
+      },
+      payment.userId,
+    );
+    return this.createSubscription({
+      ...target,
+      plan,
+      source: SubscriptionSource.SELF_SERVE,
+      notes: 'Paid with Razorpay',
+      payment: {
+        provider: PaymentProvider.RAZORPAY,
+        status: PaymentStatus.SUCCESS,
+      },
+      reusePaymentId: payment.id,
+    });
+  }
+
   async findAllForHq(
     query: HqSubscriptionsQueryDto,
   ): Promise<PaginatedResponseDto<Subscription>> {
-    const { page = 1, limit = 10, locationId, profileId, userId, planId, status } =
-      query;
+    const {
+      page = 1,
+      limit = 10,
+      locationId,
+      profileId,
+      userId,
+      planId,
+      status,
+    } = query;
     await this.expireOverdue({ locationId, profileId, userId });
 
     const where: FindOptionsWhere<Subscription> = {};
@@ -347,13 +456,18 @@ export class SubscriptionsService implements OnModuleInit {
       status?: PaymentStatus;
       discountAmount?: number;
     };
+    reusePaymentId?: string;
   }): Promise<Subscription> {
     if (!input.plan.isActive) {
       throw new BadRequestException(`Plan "${input.plan.code}" is not active`);
     }
 
     const product = input.plan.product ?? Product.EASY_REVIEW;
-    const subject = this.assertPlanSubject(product, input.location, input.profile);
+    const subject = this.assertPlanSubject(
+      product,
+      input.location,
+      input.profile,
+    );
     await this.expireOverdue(subject);
 
     const isComplimentary = input.plan.amount === 0;
@@ -389,13 +503,21 @@ export class SubscriptionsService implements OnModuleInit {
 
     try {
       const saved = await this.subscriptionRepository.save(subscription);
-      await this.paymentsService.createForSubscription(saved, input.plan, {
-        provider: input.payment?.provider,
-        utr: input.payment?.utr,
-        notes: input.payment?.notes ?? input.notes,
-        status: paymentStatus,
-        discountAmount: input.payment?.discountAmount,
-      });
+      if (input.reusePaymentId) {
+        await this.paymentsService.attachCheckoutPayment(
+          input.reusePaymentId,
+          saved.id,
+          paymentStatus,
+        );
+      } else {
+        await this.paymentsService.createForSubscription(saved, input.plan, {
+          provider: input.payment?.provider,
+          utr: input.payment?.utr,
+          notes: input.payment?.notes ?? input.notes,
+          status: paymentStatus,
+          discountAmount: input.payment?.discountAmount,
+        });
+      }
       return this.findOneById(saved.id);
     } catch (error) {
       if (error instanceof ConflictException) {
@@ -865,7 +987,9 @@ export class SubscriptionsService implements OnModuleInit {
     userId?: string,
   ): Promise<{ location?: Location; profile?: Profile }> {
     if (dto.locationId && dto.profileId) {
-      throw new BadRequestException('Provide a location or a profile, not both');
+      throw new BadRequestException(
+        'Provide a location or a profile, not both',
+      );
     }
     if (dto.profileId) {
       return { profile: await this.findProfile(dto.profileId, userId) };

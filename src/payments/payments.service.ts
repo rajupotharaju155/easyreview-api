@@ -3,11 +3,17 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
+import {
+  FindOptionsWhere,
+  IsNull,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Expense } from '../expenses/entities/expense.entity';
@@ -15,13 +21,17 @@ import { Order } from '../orders/entities/order.entity';
 import { OrderStatus } from '../orders/enums/order-status.enum';
 import { Plan } from '../plans/entities/plan.entity';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import {
+  SubscriptionsService,
+  type CheckoutContext,
+} from '../subscriptions/subscriptions.service';
 import {
   addDaysToIsoDate,
   istMidnightUtc,
   istThisAndLastMonth,
 } from '../subscriptions/utils/ist-date.util';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateRazorpayOrderDto } from './dto/create-razorpay-order.dto';
 import { HqNetSeriesDto } from './dto/hq-net-series.dto';
 import { HqPaymentSummaryDto } from './dto/hq-payment-summary.dto';
 import { HqPaymentsQueryDto } from './dto/hq-payments-query.dto';
@@ -29,11 +39,17 @@ import { MarkPaymentSuccessDto } from './dto/mark-payment-success.dto';
 import { PaymentsQueryDto } from './dto/payments-query.dto';
 import { SubmitPaymentDto } from './dto/submit-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { VerifyRazorpayPaymentDto } from './dto/verify-razorpay-payment.dto';
 import { Payment } from './entities/payment.entity';
 import { NetSeriesRange } from './enums/net-series-range.enum';
 import { PaymentKind } from './enums/payment-kind.enum';
 import { PaymentProvider } from './enums/payment-provider.enum';
 import { PaymentStatus } from './enums/payment-status.enum';
+import { RazorpayClient } from './razorpay.client';
+import {
+  MIN_RAZORPAY_AMOUNT_SUBUNITS,
+  toCurrencySubunits,
+} from './utils/razorpay-signature.util';
 import {
   buildNetSeriesBuckets,
   netSeriesTruncUnit,
@@ -60,6 +76,7 @@ export class PaymentsService {
     @Inject(forwardRef(() => SubscriptionsService))
     private readonly subscriptionsService: SubscriptionsService,
     private readonly currentUserUtil: CurrentUserUtil,
+    private readonly razorpayClient: RazorpayClient,
   ) {}
 
   async findAllForUser(
@@ -114,6 +131,160 @@ export class PaymentsService {
     if (dto.notes !== undefined) payment.notes = dto.notes;
     await this.paymentRepository.save(payment);
     return this.findOneForUser(id);
+  }
+
+  /**
+   * Starts Razorpay checkout for the signed-in user.
+   * Creates a pending payments row, and a pending_payment subscription on a
+   * first purchase. Stores the Razorpay order id on payments.gatewayOrderId.
+   * Amount in the response is paise; payments.amount stays in rupees.
+   */
+  async createCheckoutOrder(dto: CreateRazorpayOrderDto): Promise<{
+    order_id: string;
+    amount: number;
+    currency: string;
+  }> {
+    const userId = this.currentUserUtil.getCurrentUserId();
+    // Plan, location/profile, and whether a pending or live subscription already exists.
+    const context = await this.subscriptionsService.resolveCheckout(dto);
+    const currency = context.plan.currency || 'INR';
+    // payments.amount is rupees; Razorpay requires the same price in paise.
+    const amount = toCurrencySubunits(context.plan.amount);
+    if (amount < MIN_RAZORPAY_AMOUNT_SUBUNITS) {
+      throw new BadRequestException('Amount must be at least 100 paise');
+    }
+
+    // Create or reuse the pending payments row. No Razorpay call yet.
+    const payment = await this.ensureCheckoutPayment(userId, dto, context);
+    // Same unpaid plan already has an order, so reuse gatewayOrderId.
+    if (
+      payment.gatewayOrderId &&
+      payment.planId === context.plan.id &&
+      payment.amount === context.plan.amount &&
+      payment.currency === currency
+    ) {
+      return {
+        order_id: payment.gatewayOrderId,
+        amount,
+        currency,
+      };
+    }
+
+    // Keep the DB amount in rupees and point the row at Razorpay before the order exists.
+    payment.amount = context.plan.amount;
+    payment.currency = currency;
+    payment.planId = context.plan.id;
+    payment.discountAmount = 0;
+    payment.provider = PaymentProvider.RAZORPAY;
+
+    const order = await this.razorpayClient.createOrder({
+      amount,
+      currency,
+      notes: {
+        paymentId: payment.id,
+        planId: context.plan.id,
+      },
+    });
+
+    // Persist order_... so verify can find this row. Status stays pending.
+    payment.gatewayOrderId = order.id;
+    await this.paymentRepository.save(payment);
+
+    return {
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+    };
+  }
+
+  /**
+   * Confirms a Razorpay payment and activates or queues the subscription.
+   * A signature mismatch returns 400 and writes nothing. A failed or
+   * dismissed modal never calls this method.
+   */
+  async verifyCheckoutPayment(
+    dto: VerifyRazorpayPaymentDto,
+  ): Promise<{ success: true }> {
+    const userId = this.currentUserUtil.getCurrentUserId();
+    // HMAC-SHA256 of "order_id|payment_id" using the key secret.
+    const valid = this.razorpayClient.signaturesMatch(
+      dto.razorpay_order_id,
+      dto.razorpay_payment_id,
+      dto.razorpay_signature,
+    );
+    // Bad signature: leave payments.status pending and do not touch subscriptions.
+    if (!valid) {
+      throw new BadRequestException('Payment signature mismatch');
+    }
+
+    // The row written at checkout start, matched by gatewayOrderId.
+    const payment = await this.paymentRepository.findOne({
+      where: { gatewayOrderId: dto.razorpay_order_id, userId },
+    });
+    if (!payment) {
+      throw new BadRequestException('Payment not found for this order');
+    }
+
+    // Retry of an already paid checkout: activate if that step was missed.
+    if (payment.status === PaymentStatus.SUCCESS) {
+      if (payment.subscriptionId) {
+        await this.subscriptionsService.activateFromPayment(
+          payment.subscriptionId,
+        );
+      }
+      return { success: true };
+    }
+    // Failed or refunded rows are never flipped to success.
+    if (
+      payment.status === PaymentStatus.FAILED ||
+      payment.status === PaymentStatus.REFUNDED
+    ) {
+      throw new BadRequestException(
+        `Cannot verify a ${payment.status} payment`,
+      );
+    }
+
+    // Store pay_... while status is still pending, before any subscription write.
+    payment.gatewayPaymentId = dto.razorpay_payment_id;
+    payment.provider = PaymentProvider.RAZORPAY;
+    await this.paymentRepository.save(payment);
+
+    // Upgrade: subscriptionId is null, so create a queued subscription and attach this payment.
+    if (!payment.subscriptionId) {
+      await this.subscriptionsService.activateUpgradeCheckout(payment);
+      return { success: true };
+    }
+
+    // First purchase: payments.status = success, then pending_payment subscription becomes active.
+    await this.markSuccess(payment, {});
+    return { success: true };
+  }
+
+  /**
+   * Points the upgrade payment at the subscription created after payment.
+   * Sets payments.subscriptionId, status success, and succeededAt.
+   * Does not insert a new payments row.
+   */
+  async attachCheckoutPayment(
+    paymentId: string,
+    subscriptionId: string,
+    status: PaymentStatus,
+  ): Promise<Payment> {
+    const payment = await this.findOneById(paymentId);
+    // This was null at checkout start so an active plan could stay in place.
+    payment.subscriptionId = subscriptionId;
+    payment.provider = PaymentProvider.RAZORPAY;
+    if (status === PaymentStatus.SUCCESS) {
+      payment.status = PaymentStatus.SUCCESS;
+      // Set once; a later retry must not move succeededAt.
+      payment.succeededAt = payment.succeededAt ?? new Date();
+    }
+    await this.paymentRepository.save(payment);
+    // Dates are already set for a queued upgrade, so this usually changes nothing.
+    if (status === PaymentStatus.SUCCESS) {
+      await this.subscriptionsService.activateFromPayment(subscriptionId);
+    }
+    return this.findOneById(paymentId);
   }
 
   async findAllForHq(
@@ -663,6 +834,101 @@ export class PaymentsService {
       order.status = OrderStatus.CONFIRMED;
       await this.orderRepository.save(order);
     }
+  }
+
+  /**
+   * Finds or creates the pending payments row for this checkout.
+   * First purchase also creates a pending_payment subscription.
+   * An upgrade stores the payment with subscriptionId null.
+   * Does not call Razorpay and does not mark anything paid.
+   */
+  private async ensureCheckoutPayment(
+    userId: string,
+    dto: CreateRazorpayOrderDto,
+    context: CheckoutContext,
+  ): Promise<Payment> {
+    const locationId = context.location?.id ?? null;
+    const profileId = context.profile?.id ?? null;
+
+    // Checkout already started: reuse the pending payment on that subscription.
+    if (context.pendingSubscription) {
+      const existing = await this.paymentRepository.findOne({
+        where: {
+          subscriptionId: context.pendingSubscription.id,
+          userId,
+          status: PaymentStatus.PENDING,
+          kind: PaymentKind.SUBSCRIPTION,
+        },
+        order: { createdAt: 'DESC' },
+      });
+      if (existing) return existing;
+      // Pending subscription exists, but its payments row does not.
+      return this.createForSubscription(
+        context.pendingSubscription,
+        context.plan,
+        {
+          provider: PaymentProvider.RAZORPAY,
+          status: PaymentStatus.PENDING,
+        },
+      );
+    }
+
+    // First purchase: insert subscriptions.status = pending_payment and a pending payment.
+    if (!context.hasOpenSubscription) {
+      const subscription = await this.subscriptionsService.createForUser({
+        planId: dto.planId,
+        locationId: dto.locationId,
+        profileId: dto.profileId,
+      });
+      const created = await this.paymentRepository.findOne({
+        where: {
+          subscriptionId: subscription.id,
+          userId,
+          status: PaymentStatus.PENDING,
+          kind: PaymentKind.SUBSCRIPTION,
+        },
+        order: { createdAt: 'DESC' },
+      });
+      if (!created) {
+        throw new InternalServerErrorException('Unable to start checkout');
+      }
+      return created;
+    }
+
+    // Active or queued plan: look for an unpaid upgrade payment with subscriptionId null.
+    const upgradePayment = await this.paymentRepository.findOne({
+      where: {
+        subscriptionId: IsNull(),
+        userId,
+        planId: context.plan.id,
+        locationId: locationId ?? IsNull(),
+        profileId: profileId ?? IsNull(),
+        status: PaymentStatus.PENDING,
+        kind: PaymentKind.SUBSCRIPTION,
+        provider: PaymentProvider.RAZORPAY,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    if (upgradePayment) return upgradePayment;
+
+    // Insert that upgrade payment. The subscription row is created only after verify.
+    return this.insertPayment({
+      kind: PaymentKind.SUBSCRIPTION,
+      subscriptionId: null,
+      orderId: null,
+      planId: context.plan.id,
+      locationId,
+      profileId,
+      userId,
+      amount: context.plan.amount,
+      discountAmount: 0,
+      currency: context.plan.currency || 'INR',
+      status: PaymentStatus.PENDING,
+      provider: PaymentProvider.RAZORPAY,
+      utr: null,
+      notes: null,
+      succeededAt: null,
+    });
   }
 
   private async insertPayment(data: Partial<Payment>): Promise<Payment> {
