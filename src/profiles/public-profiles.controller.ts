@@ -8,8 +8,9 @@ import { ProfilesService } from './profiles.service';
  * Serves the public digital business card at
  * `https://easyreview.co.in/profile/:slug`.
  *
- * Note: no `by-slug` in the path — the slug is the only public identifier
- * for a profile.
+ * The path segment is the current slug, or the profile code encoded in
+ * the QR / NFC tag. A code resolves to the same card; the site then
+ * replaces the address bar with the slug. Previous slugs are not kept.
  */
 @Controller('profiles')
 export class PublicProfilesController {

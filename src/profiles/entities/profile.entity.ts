@@ -51,6 +51,16 @@ export class Profile {
   @Column({ type: 'varchar', length: PROFILE_SLUG_MAX_LENGTH, nullable: true })
   slug: string | null;
 
+  /**
+   * Stable key encoded in the profile QR and NFC tag (`/profile/:code`).
+   * Never shown in the UI. A visit redirects to the current slug.
+   * Immutable, and reserved after soft-delete so a printed tag cannot
+   * be reassigned. Nullable only until backfill fills existing rows.
+   */
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  code: string | null;
+
   @Column({ type: 'varchar', length: PROFILE_DISPLAY_NAME_MAX_LENGTH })
   displayName: string;
 

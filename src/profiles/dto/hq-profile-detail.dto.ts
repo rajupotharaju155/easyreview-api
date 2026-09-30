@@ -18,6 +18,8 @@ export class HqProfileDetailDto {
   id: string;
   userId: string;
   slug: string | null;
+  /** Encoded into the HQ profile QR. Not rendered as text. */
+  code: string | null;
   displayName: string;
   designation: string | null;
   companyName: string | null;
