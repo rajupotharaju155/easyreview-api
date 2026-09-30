@@ -19,6 +19,8 @@ export class ProfileDto {
   id: string;
   userId: string;
   slug: string;
+  /** Used only to build the QR image. Not rendered as text. */
+  code: string;
   displayName: string;
   designation: string | null;
   companyName: string | null;

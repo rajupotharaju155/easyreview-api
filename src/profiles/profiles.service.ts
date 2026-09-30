@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -35,7 +34,10 @@ import {
 import { ProfileLeadsQueryDto } from './dto/profile-leads-query.dto';
 import { ReorderProfileLinksDto } from './dto/reorder-profile-links.dto';
 import { UpdateProfileLinkDto } from './dto/update-profile-link.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
+import {
+  UpdateProfileDto,
+  PROFILE_SLUG_PATTERN,
+} from './dto/update-profile.dto';
 import { ProfileLead } from './entities/profile-lead.entity';
 import { PROFILE_MAX_LINKS, ProfileLink } from './entities/profile-link.entity';
 import { Profile } from './entities/profile.entity';
@@ -44,11 +46,10 @@ import {
   ProfileStorageService,
   type ProfileImageFile,
 } from './profile-storage.service';
+import { generateProfileCodeValue, isProfileCode } from './profile-code.util';
 
 @Injectable()
 export class ProfilesService {
-  private readonly logger = new Logger(ProfilesService.name);
-
   constructor(
     @InjectRepository(Profile)
     private readonly profileRepository: Repository<Profile>,
@@ -73,9 +74,11 @@ export class ProfilesService {
 
     const profile = await this.dataSource.transaction(async (manager) => {
       const slug = await this.allocateUniqueSlug(manager, dto.displayName);
+      const code = await this.allocateUniqueCode(manager);
       const created = manager.create(Profile, {
         userId,
         slug,
+        code,
         displayName: dto.displayName.trim(),
         designation: dto.designation ?? null,
         companyName: dto.companyName ?? null,
@@ -342,15 +345,13 @@ export class ProfilesService {
   // Public endpoints
   // ------------------------------------------------------------------
 
-  async findPublicBySlug(slug: string): Promise<PublicProfileDto> {
-    const profile = await this.profileRepository.findOne({
-      where: { slug, isPublished: true },
-    });
+  async findPublicBySlug(rawKey: string): Promise<PublicProfileDto> {
+    const profile = await this.findPublishedProfileByKey(rawKey);
     if (!profile || !profile.slug) {
-      throw new NotFoundException(`Profile with slug "${slug}" not found`);
+      throw new NotFoundException(`Profile with slug "${rawKey}" not found`);
     }
     if (!(await this.hasLiveProfilePlan(profile.id))) {
-      throw new NotFoundException(`Profile with slug "${slug}" not found`);
+      throw new NotFoundException(`Profile with slug "${rawKey}" not found`);
     }
 
     const links = await this.linkRepository.find({
@@ -416,7 +417,7 @@ export class ProfilesService {
   // ------------------------------------------------------------------
 
   /**
-   * Lists profiles globally for HQ. Search matches id, slug, or display name.
+   * Lists profiles globally for HQ. Search matches id, slug, code, or display name.
    * `deleted` follows the standard HQ filter (active by default). Links and
    * leads are aggregated as counts so the payload stays lean.
    */
@@ -452,7 +453,7 @@ export class ProfilesService {
 
     if (term) {
       qb.andWhere(
-        '(profile.id ILIKE :term OR profile.slug ILIKE :term OR profile.displayName ILIKE :term)',
+        '(profile.id ILIKE :term OR profile.slug ILIKE :term OR profile.code ILIKE :term OR profile.displayName ILIKE :term)',
         { term: `%${term}%` },
       );
     }
@@ -503,6 +504,7 @@ export class ProfilesService {
       id: profile.id,
       userId: profile.userId,
       slug: profile.slug,
+      code: profile.code,
       displayName: profile.displayName,
       designation: profile.designation,
       companyName: profile.companyName,
@@ -737,21 +739,81 @@ export class ProfilesService {
   }
 
   /**
-   * Slug is considered taken if any row (soft-deleted included) already uses it.
-   * Reserving deleted slugs prevents printed NFC cards from resolving to a
-   * different owner after a card was deleted and someone re-registers the name.
+   * Slug is taken if any row (soft-deleted included) already uses it, or if
+   * its uppercase form is another profile's code. Reserving both keeps a
+   * printed QR from opening a different card.
    */
   private async isSlugAvailable(
     manager: EntityManager,
     slug: string,
     ignoreProfileId?: string,
   ): Promise<boolean> {
-    const existing = await manager.findOne(Profile, {
-      where: ignoreProfileId ? { slug, id: Not(ignoreProfileId) } : { slug },
-      withDeleted: true,
-      select: ['id'],
+    const slugWhere = ignoreProfileId
+      ? { slug, id: Not(ignoreProfileId) }
+      : { slug };
+    const codeWhere = ignoreProfileId
+      ? { code: slug.toUpperCase(), id: Not(ignoreProfileId) }
+      : { code: slug.toUpperCase() };
+
+    const [slugTaken, codeTaken] = await Promise.all([
+      manager.findOne(Profile, {
+        where: slugWhere,
+        withDeleted: true,
+        select: ['id'],
+      }),
+      manager.findOne(Profile, {
+        where: codeWhere,
+        withDeleted: true,
+        select: ['id'],
+      }),
+    ]);
+    return !slugTaken && !codeTaken;
+  }
+
+  private async allocateUniqueCode(manager: EntityManager): Promise<string> {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const code = generateProfileCodeValue();
+      const [codeTaken, slugTaken] = await Promise.all([
+        manager.findOne(Profile, {
+          where: { code },
+          withDeleted: true,
+          select: ['id'],
+        }),
+        manager.findOne(Profile, {
+          where: { slug: code.toLowerCase() },
+          withDeleted: true,
+          select: ['id'],
+        }),
+      ]);
+      if (!codeTaken && !slugTaken) return code;
+    }
+
+    throw new ConflictException('Unable to allocate a unique profile code');
+  }
+
+  /**
+   * The current slug wins. A code is only used when no slug matches, so a
+   * renamed slug 404s and the QR / NFC tag still opens the card.
+   */
+  private async findPublishedProfileByKey(
+    rawKey: string,
+  ): Promise<Profile | null> {
+    const key = rawKey.trim();
+    if (!key) return null;
+
+    const slug = key.toLowerCase();
+    if (PROFILE_SLUG_PATTERN.test(slug)) {
+      const bySlug = await this.profileRepository.findOne({
+        where: { slug, isPublished: true },
+      });
+      if (bySlug) return bySlug;
+    }
+
+    const code = key.toUpperCase();
+    if (!isProfileCode(code)) return null;
+    return this.profileRepository.findOne({
+      where: { code, isPublished: true },
     });
-    return !existing;
   }
 
   /**
@@ -771,6 +833,7 @@ export class ProfilesService {
       id: profile.id,
       userId: profile.userId,
       slug: profile.slug ?? '',
+      code: profile.code ?? '',
       displayName: profile.displayName,
       designation: profile.designation,
       companyName: profile.companyName,

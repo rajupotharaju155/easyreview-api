@@ -9,7 +9,7 @@ function trimString({ value }: { value: unknown }): unknown {
 
 /**
  * Query parameters for `GET /hq/profiles`.
- * Search matches profile id, slug, or display name (case-insensitive).
+ * Search matches profile id, slug, code, or display name (case-insensitive).
  * `deleted` follows the standard HQ filter: active by default.
  */
 export class HqProfilesQueryDto extends PaginationDto {
