@@ -45,7 +45,10 @@
     "gcp:profile-bucket:staging": "bash scripts/setup-profile-bucket.sh staging",
     "gcp:profile-bucket:production": "bash scripts/setup-profile-bucket.sh production",
     "deploy:staging": "bash scripts/deploy-cloud-run.sh staging",
-    "deploy:production": "bash scripts/deploy-cloud-run.sh production"
+    "deploy:production": "bash scripts/deploy-cloud-run.sh production",
+    "staging:stop": "bash scripts/start-stop-staging.sh stop",
+    "staging:start": "bash scripts/start-stop-staging.sh start",
+    "staging:status": "bash scripts/start-stop-staging.sh status"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.1",
