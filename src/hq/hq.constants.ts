@@ -34,14 +34,19 @@ export type AttentionQueueKey = (typeof ATTENTION_QUEUE_KEYS)[number];
 /** Active subscriptions ending within this many days (inclusive). */
 export const ATTENTION_ENDING_SOON_DAYS = 14;
 
-/** HQ subscriptions page queues, grouped by plan duration plus overdue. */
+/**
+ * HQ subscriptions page queues. Live plans are grouped by duration, then
+ * complimentary live plans, then lapsed plans split by whether the latest
+ * plan was paid or free/demo.
+ */
 export const SUBSCRIPTION_QUEUE_KEYS = [
   'annual',
   'sixMonths',
   'monthly',
   'sevenDays',
   'free',
-  'overdue',
+  'overduePaid',
+  'overdueFree',
 ] as const;
 
 export type SubscriptionQueueKey = (typeof SUBSCRIPTION_QUEUE_KEYS)[number];

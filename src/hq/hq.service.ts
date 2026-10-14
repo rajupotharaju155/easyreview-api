@@ -315,21 +315,39 @@ export class HqService {
 
   /**
    * Subscriptions page tab counts: paid live annual / 6-month / monthly /
-   * 7-day plans, complimentary live subscriptions, and overdue rows.
+   * 7-day plans, complimentary live subscriptions, and overdue businesses
+   * split into paid vs free/demo (one row per location or profile, its
+   * latest lapsed plan).
    */
   async getSubscriptionQueues(): Promise<HqSubscriptionQueueCounts> {
     const today = todayIst();
-    const [annual, sixMonths, monthly, sevenDays, free, overdue] =
-      await Promise.all([
-        this.activeByDurationQb(today, 'annual').getCount(),
-        this.activeByDurationQb(today, 'sixMonths').getCount(),
-        this.activeByDurationQb(today, 'monthly').getCount(),
-        this.activeByDurationQb(today, 'sevenDays').getCount(),
-        this.freeActiveQb(today).getCount(),
-        this.overdueQb(today).getCount(),
-      ]);
+    const [
+      annual,
+      sixMonths,
+      monthly,
+      sevenDays,
+      free,
+      overduePaid,
+      overdueFree,
+    ] = await Promise.all([
+      this.activeByDurationQb(today, 'annual').getCount(),
+      this.activeByDurationQb(today, 'sixMonths').getCount(),
+      this.activeByDurationQb(today, 'monthly').getCount(),
+      this.activeByDurationQb(today, 'sevenDays').getCount(),
+      this.freeActiveQb(today).getCount(),
+      this.overdueQb(today, 'paid').getCount(),
+      this.overdueQb(today, 'free').getCount(),
+    ]);
 
-    return { annual, sixMonths, monthly, sevenDays, free, overdue };
+    return {
+      annual,
+      sixMonths,
+      monthly,
+      sevenDays,
+      free,
+      overduePaid,
+      overdueFree,
+    };
   }
 
   /**
@@ -345,11 +363,13 @@ export class HqService {
     const today = todayIst();
 
     const qb =
-      queue === 'overdue'
-        ? this.overdueQb(today)
-        : queue === 'free'
-          ? this.freeActiveQb(today)
-          : this.activeByDurationQb(today, queue);
+      queue === 'overduePaid'
+        ? this.overdueQb(today, 'paid')
+        : queue === 'overdueFree'
+          ? this.overdueQb(today, 'free')
+          : queue === 'free'
+            ? this.freeActiveQb(today)
+            : this.activeByDurationQb(today, queue);
 
     const [subscriptions, total] = await Promise.all([
       qb.clone().skip(skip).take(limit).getMany(),
@@ -424,8 +444,19 @@ export class HqService {
       .orderBy('subscription.endDate', 'ASC');
   }
 
-  private overdueQb(today: string) {
-    return this.subscriptionRepository
+  /**
+   * Lapsed plans with no live coverage for that product. A location or
+   * profile that has renewed and lapsed more than once appears once, as
+   * the plan that expired most recently. `billing` keeps paying customers
+   * apart from free/demo lapses; omit it for the combined attention queue.
+   */
+  private overdueQb(today: string, billing?: 'paid' | 'free') {
+    const overdueStatuses = [
+      SubscriptionStatus.ACTIVE,
+      SubscriptionStatus.EXPIRED,
+    ];
+
+    const qb = this.subscriptionRepository
       .createQueryBuilder('subscription')
       .withDeleted()
       .innerJoinAndSelect('subscription.plan', 'plan')
@@ -443,12 +474,53 @@ export class HqService {
       .where('liveSub.id IS NULL')
       .andWhere('subscription.endDate < :today', { today })
       .andWhere('subscription.status IN (:...overdueStatuses)', {
-        overdueStatuses: [
-          SubscriptionStatus.ACTIVE,
-          SubscriptionStatus.EXPIRED,
-        ],
+        overdueStatuses,
       })
-      .orderBy('subscription.createdAt', 'DESC');
+      .andWhere(`subscription.id IN (${this.latestOverdueIdsSql()})`, {
+        liveStatuses: LIVE_SUBSCRIPTION_STATUSES,
+        today,
+        overdueStatuses,
+      })
+      .orderBy('subscription.endDate', 'DESC')
+      .addOrderBy('subscription.createdAt', 'DESC');
+
+    if (billing === 'paid') return this.wherePaidSuccessPayment(qb);
+    if (billing === 'free') return this.whereFreeSuccessPayment(qb);
+    return qb;
+  }
+
+  /**
+   * One subscription id per location or profile: the latest end date among
+   * plans that are actually overdue (no live plan for the same product).
+   */
+  private latestOverdueIdsSql(): string {
+    const subjectKey = `CASE
+      WHEN s."locationId" IS NOT NULL THEN 'location:' || s."locationId"
+      ELSE 'profile:' || s."profileId"
+    END`;
+
+    return `SELECT DISTINCT ON (subject_key) id
+      FROM (
+        SELECT
+          s.id AS id,
+          ${subjectKey} AS subject_key,
+          s."endDate" AS end_date,
+          s."createdAt" AS created_at
+        FROM subscriptions s
+        WHERE s."endDate" < :today
+          AND s."status" IN (:...overdueStatuses)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM subscriptions live_plan
+            WHERE (
+              (s."locationId" IS NOT NULL AND live_plan."locationId" = s."locationId")
+              OR (s."profileId" IS NOT NULL AND live_plan."profileId" = s."profileId")
+            )
+              AND live_plan."product" = s."product"
+              AND ${LIVE_SUBSCRIPTION_SQL('live_plan')}
+          )
+      ) latest_overdue
+      ORDER BY subject_key, end_date DESC NULLS LAST, created_at DESC, id DESC`;
   }
 
   private activeByDurationQb(
