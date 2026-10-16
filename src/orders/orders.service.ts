@@ -14,30 +14,11 @@ import type { OrderConfirmationEmailDetails } from '../email/templates/email.tem
 import { Location } from '../locations/entities/location.entity';
 import { QrProductsService } from '../hq/qr-products/qr-products.service';
 import { PaymentsService } from '../payments/payments.service';
+import { formatDateTimeIst } from '../subscriptions/utils/ist-date.util';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order } from './entities/order.entity';
 import { DeliveryTo } from './enums/delivery-to.enum';
 import { OrderStatus } from './enums/order-status.enum';
-
-function formatOrderPlacedAtIst(value?: Date | string | null): string {
-  const date =
-    value instanceof Date
-      ? value
-      : value != null
-        ? new Date(value)
-        : new Date();
-  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
-  const formatted = new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(safeDate);
-  return `${formatted} IST`;
-}
 
 @Injectable()
 export class OrdersService {
@@ -157,7 +138,7 @@ export class OrdersService {
       amountInr: order.amountInr,
       phoneNumber: order.phoneNumber,
       deliveryAddress: deliveryAddress || 'Address on file',
-      placedAtIst: formatOrderPlacedAtIst(order.createdAt),
+      placedAtIst: formatDateTimeIst(order.createdAt),
     };
     await this.emailService.sendOrderConfirmation(
       email,
