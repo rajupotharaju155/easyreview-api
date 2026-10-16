@@ -161,7 +161,7 @@ export class ExpensesService {
   }
 
   async findSummaryForHq(): Promise<HqExpenseSummaryDto> {
-    const { thisMonth, lastMonth } = istThisAndLastMonth();
+    const { thisMonth, lastMonth, monthBeforeLast } = istThisAndLastMonth();
     const raw = await this.expenseRepository
       .createQueryBuilder('expense')
       .select(`COALESCE(SUM(expense.amount), 0)`, 'lifetimeAmount')
@@ -182,11 +182,21 @@ export class ExpensesService {
         `COUNT(CASE WHEN expense.incurredAt >= :lastFrom AND expense.incurredAt <= :lastTo THEN 1 END)`,
         'lastMonthCount',
       )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN expense.incurredAt >= :beforeLastFrom AND expense.incurredAt <= :beforeLastTo THEN expense.amount ELSE 0 END), 0)`,
+        'monthBeforeLastAmount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN expense.incurredAt >= :beforeLastFrom AND expense.incurredAt <= :beforeLastTo THEN 1 END)`,
+        'monthBeforeLastCount',
+      )
       .setParameters({
         thisFrom: thisMonth.from,
         thisTo: thisMonth.to,
         lastFrom: lastMonth.from,
         lastTo: lastMonth.to,
+        beforeLastFrom: monthBeforeLast.from,
+        beforeLastTo: monthBeforeLast.to,
       })
       .getRawOne<{
         lifetimeAmount: string | number;
@@ -195,6 +205,8 @@ export class ExpensesService {
         thisMonthCount: string | number;
         lastMonthAmount: string | number;
         lastMonthCount: string | number;
+        monthBeforeLastAmount: string | number;
+        monthBeforeLastCount: string | number;
       }>();
 
     return new HqExpenseSummaryDto({
@@ -214,6 +226,12 @@ export class ExpensesService {
         count: toCount(raw?.lastMonthCount),
         from: lastMonth.from,
         to: lastMonth.to,
+      },
+      monthBeforeLast: {
+        amount: toCount(raw?.monthBeforeLastAmount),
+        count: toCount(raw?.monthBeforeLastCount),
+        from: monthBeforeLast.from,
+        to: monthBeforeLast.to,
       },
     });
   }
