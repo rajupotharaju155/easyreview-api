@@ -151,6 +151,75 @@ export function orderConfirmationEmailHtml(
   `);
 }
 
+const PRIVATE_FEEDBACK_DASHBOARD_URL =
+  'https://app.easyreview.co.in/easy-review/private-feedback';
+
+export type PrivateFeedbackEmailDetails = {
+  locationName: string;
+  rating: number;
+  feedback: string;
+  receivedAtIst: string;
+};
+
+function ratingStars(rating: number): string {
+  const filled = Math.min(5, Math.max(0, Math.round(rating)));
+  const empty = 5 - filled;
+  const filledStars = filled
+    ? `<span style="color: #fbbf24;">${'&#9733;'.repeat(filled)}</span>`
+    : '';
+  const emptyStars = empty
+    ? `<span style="color: #cbd5e1;">${'&#9733;'.repeat(empty)}</span>`
+    : '';
+  return `${filledStars}${emptyStars}`;
+}
+
+export function privateFeedbackReceivedEmailHtml(
+  details: PrivateFeedbackEmailDetails,
+): string {
+  const locationName = escapeHtml(details.locationName);
+  const feedback = escapeHtml(details.feedback).replaceAll('\n', '<br>');
+  const receivedAtIst = escapeHtml(details.receivedAtIst);
+  const stars = ratingStars(details.rating);
+
+  return emailShell(`
+    <p style="margin: 0 0 16px; line-height: 1.5;">
+      A customer sent this privately for <strong>${locationName}</strong> instead of posting it on Google.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; margin: 0 0 16px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;">
+      <tr>
+        <td align="left" style="padding: 20px; text-align: left;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; margin: 0 0 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; font-weight: 600; color: #0f172a; vertical-align: middle; text-align: left;">
+                ${locationName}
+              </td>
+              <td align="right" style="vertical-align: middle; width: 1%; white-space: nowrap; padding-left: 12px;">
+                <span style="display: inline-block; background: #fffbeb; color: #b45309; font-size: 12px; font-weight: 500; line-height: 1.4; padding: 2px 8px; border-radius: 8px;">
+                  Private
+                </span>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 0 0 12px; font-size: 18px; line-height: 1; letter-spacing: 2px; text-align: left;">${stars}</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.625; color: #475569; text-align: left; word-break: break-word;">&ldquo;${feedback}&rdquo;</p>
+          <p style="margin: 12px 0 0; font-size: 12px; color: #94a3b8; text-align: left;">${receivedAtIst}</p>
+        </td>
+      </tr>
+    </table>
+    <p style="margin: 0 0 16px; text-align: center; color: #ea580c; font-size: 14px; font-weight: 600; line-height: 1.5;">
+      This review is NOT posted on Google
+    </p>
+    <p style="margin: 0;">
+      <a
+        href="${PRIVATE_FEEDBACK_DASHBOARD_URL}"
+        style="display: inline-block; background: #6b2fd5; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 8px;"
+      >
+        View private feedback
+      </a>
+    </p>
+  `);
+}
+
 export function adminOrderReceivedEmailHtml(
   details: OrderConfirmationEmailDetails,
 ): string {

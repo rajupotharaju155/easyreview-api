@@ -1,21 +1,27 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
+import { EmailService } from '../email/email.service';
+import type { PrivateFeedbackEmailDetails } from '../email/templates/email.templates';
 import { Location } from '../locations/entities/location.entity';
+import { formatDateTimeIst } from '../subscriptions/utils/ist-date.util';
 import { CreatePrivateFeedbackDto } from './dto/create-private-feedback.dto';
 import { PrivateFeedbackQueryDto } from './dto/private-feedback-query.dto';
 import { PrivateFeedback } from './entities/private-feedback.entity';
 
 @Injectable()
 export class PrivateFeedbackService {
+  private readonly logger = new Logger(PrivateFeedbackService.name);
+
   constructor(
     @InjectRepository(PrivateFeedback)
     private readonly privateFeedbackRepository: Repository<PrivateFeedback>,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
     private readonly currentUserUtil: CurrentUserUtil,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(
@@ -23,6 +29,7 @@ export class PrivateFeedbackService {
   ): Promise<PrivateFeedback> {
     const location = await this.locationRepository.findOne({
       where: { id: createPrivateFeedbackDto.locationId },
+      relations: { user: true },
     });
     if (!location) {
       throw new NotFoundException(
@@ -34,7 +41,43 @@ export class PrivateFeedbackService {
       rating: createPrivateFeedbackDto.rating,
       feedback: createPrivateFeedbackDto.feedback.trim(),
     });
-    return this.privateFeedbackRepository.save(privateFeedback);
+    const saved = await this.privateFeedbackRepository.save(privateFeedback);
+    this.notifyOwner(saved, location);
+    return saved;
+  }
+
+  /**
+   * Sends the owner email without awaiting it, so the submit response
+   * returns as soon as the feedback row is saved.
+   */
+  private notifyOwner(feedback: PrivateFeedback, location: Location): void {
+    const ownerEmail = location.user?.email?.trim();
+    if (!ownerEmail) {
+      this.logger.warn(
+        `Skipping private feedback email: no owner email for location ${location.id}`,
+      );
+      return;
+    }
+
+    const details: PrivateFeedbackEmailDetails = {
+      locationName: location.name,
+      rating: feedback.rating,
+      feedback: feedback.feedback,
+      receivedAtIst: formatDateTimeIst(feedback.createdAt),
+    };
+
+    void this.emailService
+      .sendPrivateFeedbackReceived(
+        ownerEmail,
+        details,
+        location.user?.name ?? undefined,
+      )
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Failed to send private feedback email for location ${location.id}: ${message}`,
+        );
+      });
   }
 
   async findAllPaginated(
