@@ -351,12 +351,14 @@ export class PaymentsService {
   }
 
   async findSummaryForHq(): Promise<HqPaymentSummaryDto> {
-    const { thisMonth, lastMonth } = istThisAndLastMonth();
+    const { thisMonth, lastMonth, monthBeforeLast } = istThisAndLastMonth();
     const periodParams = {
       thisStart: thisMonth.startUtc,
       thisEnd: thisMonth.endExclusiveUtc,
       lastStart: lastMonth.startUtc,
       lastEnd: lastMonth.endExclusiveUtc,
+      beforeLastStart: monthBeforeLast.startUtc,
+      beforeLastEnd: monthBeforeLast.endExclusiveUtc,
     };
     const [raw, subscriptionRaw] = await Promise.all([
       this.paymentRepository
@@ -373,6 +375,10 @@ export class PaymentsService {
           `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :lastStart AND payment.succeededAt < :lastEnd THEN payment.amount ELSE 0 END), 0)`,
           'lastMonthAmount',
         )
+        .addSelect(
+          `COALESCE(SUM(CASE WHEN payment.status = :success AND payment.succeededAt >= :beforeLastStart AND payment.succeededAt < :beforeLastEnd THEN payment.amount ELSE 0 END), 0)`,
+          'monthBeforeLastAmount',
+        )
         .setParameters({
           success: PaymentStatus.SUCCESS,
           ...periodParams,
@@ -381,6 +387,7 @@ export class PaymentsService {
           lifetimeAmount: string | number;
           thisMonthAmount: string | number;
           lastMonthAmount: string | number;
+          monthBeforeLastAmount: string | number;
         }>(),
       this.subscriptionRepository
         .createQueryBuilder('subscription')
@@ -401,6 +408,10 @@ export class PaymentsService {
           `COUNT(CASE WHEN subscription.createdAt >= :lastStart AND subscription.createdAt < :lastEnd THEN 1 END)`,
           'lastMonthCount',
         )
+        .addSelect(
+          `COUNT(CASE WHEN subscription.createdAt >= :beforeLastStart AND subscription.createdAt < :beforeLastEnd THEN 1 END)`,
+          'monthBeforeLastCount',
+        )
         .setParameters({
           success: PaymentStatus.SUCCESS,
           ...periodParams,
@@ -409,6 +420,7 @@ export class PaymentsService {
           lifetimeCount: string | number;
           thisMonthCount: string | number;
           lastMonthCount: string | number;
+          monthBeforeLastCount: string | number;
         }>(),
     ]);
 
@@ -429,6 +441,12 @@ export class PaymentsService {
         subscriptionCount: toCount(subscriptionRaw?.lastMonthCount),
         from: lastMonth.from,
         to: lastMonth.to,
+      },
+      monthBeforeLast: {
+        amount: toCount(raw?.monthBeforeLastAmount),
+        subscriptionCount: toCount(subscriptionRaw?.monthBeforeLastCount),
+        from: monthBeforeLast.from,
+        to: monthBeforeLast.to,
       },
     });
   }

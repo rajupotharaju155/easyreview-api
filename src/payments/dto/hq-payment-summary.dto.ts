@@ -10,6 +10,7 @@ export class HqPaymentSummaryDto {
   lifetime: HqPaymentSummaryBucketDto;
   thisMonth: HqPaymentSummaryBucketDto;
   lastMonth: HqPaymentSummaryBucketDto;
+  monthBeforeLast: HqPaymentSummaryBucketDto;
 
   constructor(data: HqPaymentSummaryDto) {
     Object.assign(this, data);

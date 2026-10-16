@@ -72,12 +72,15 @@ export function istCalendarMonthRange(
 export function istThisAndLastMonth(now = new Date()): {
   thisMonth: IstMonthRange;
   lastMonth: IstMonthRange;
+  monthBeforeLast: IstMonthRange;
 } {
   const { year, month } = parseIsoDate(todayIst(now));
   const last = addMonthsToYearMonth(year, month, -1);
+  const beforeLast = addMonthsToYearMonth(year, month, -2);
   return {
     thisMonth: istCalendarMonthRange(year, month),
     lastMonth: istCalendarMonthRange(last.year, last.month),
+    monthBeforeLast: istCalendarMonthRange(beforeLast.year, beforeLast.month),
   };
 }
 
