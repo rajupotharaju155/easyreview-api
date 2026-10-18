@@ -17,7 +17,7 @@ export class InternalJobsController {
 
   /**
    * Bulk-refresh Google Places metrics for all locations.
-   * Invoked by Cloud Scheduler (9am / 3pm / 9pm IST).
+   * Invoked by Cloud Scheduler (9pm IST).
    */
   @Public()
   @Post('refresh-location-metrics')

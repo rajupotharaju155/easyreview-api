@@ -33,8 +33,12 @@ import {
 import { LocationScanMetric } from './entities/location-scan-metric.entity';
 import { Location } from './entities/location.entity';
 import { Review } from './entities/review.entity';
+import { Product } from '../plans/enums/product.enum';
 import { GooglePlacesService } from '../services/google-places.service';
+import { Subscription } from '../subscriptions/entities/subscription.entity';
+import { SubscriptionStatus } from '../subscriptions/enums/subscription-status.enum';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { todayIst } from '../subscriptions/utils/ist-date.util';
 
 type ScanMetricField = 'scanCount' | 'aiReviewCount' | 'redirectToGoogleCount';
 
@@ -281,8 +285,9 @@ export class LocationsService {
   }
 
   /**
-   * Refreshes Places metrics for every location. Continues on per-location errors
-   * so one bad placeId cannot abort the scheduled job.
+   * Refreshes Places metrics for locations with a live EasyReview subscription.
+   * Demo, paid, and zero-amount plans all qualify. Continues on per-location
+   * errors so one bad placeId cannot abort the scheduled job.
    */
   async refreshAllMetrics(): Promise<{
     total: number;
@@ -290,9 +295,7 @@ export class LocationsService {
     failed: number;
     failures: Array<{ locationId: string; error: string }>;
   }> {
-    const locations = await this.locationRepository.find({
-      select: ['id'],
-    });
+    const locations = await this.findLocationsWithActiveEasyReview();
 
     let succeeded = 0;
     let failed = 0;
@@ -322,6 +325,35 @@ export class LocationsService {
       failed,
       failures,
     };
+  }
+
+  /**
+   * Locations covered by an EasyReview subscription that is active today (IST).
+   * Plan amount is ignored, so demo and complimentary plans are included.
+   */
+  private findLocationsWithActiveEasyReview(): Promise<
+    Array<Pick<Location, 'id'>>
+  > {
+    const today = todayIst();
+    return this.locationRepository
+      .createQueryBuilder('location')
+      .innerJoin(
+        Subscription,
+        'subscription',
+        `subscription.locationId = location.id
+         AND subscription.product = :product
+         AND subscription.status = :status
+         AND subscription.endDate >= :today
+         AND (subscription.startDate IS NULL OR subscription.startDate <= :today)`,
+        {
+          product: Product.EASY_REVIEW,
+          status: SubscriptionStatus.ACTIVE,
+          today,
+        },
+      )
+      .select(['location.id'])
+      .distinct(true)
+      .getMany();
   }
 
   /** Daily snapshot key, e.g. 2026-07-30 */

@@ -9,6 +9,27 @@ export function todayIst(now = new Date()): string {
   }).format(now);
 }
 
+/** Date and time in IST, e.g. "16 Oct 2026, 3:35 pm IST". */
+export function formatDateTimeIst(value?: Date | string | null): string {
+  const date =
+    value instanceof Date
+      ? value
+      : value != null
+        ? new Date(value)
+        : new Date();
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const formatted = new Intl.DateTimeFormat('en-IN', {
+    timeZone: IST_TIME_ZONE,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(safeDate);
+  return `${formatted} IST`;
+}
+
 export function parseIsoDate(isoDate: string): {
   year: number;
   month: number;

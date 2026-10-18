@@ -618,7 +618,9 @@ export class HqService {
       id: subscription.id,
       locationId: subscription.locationId,
       locationName:
-        subscription.location?.name ?? subscription.profile?.displayName ?? null,
+        subscription.location?.name ??
+        subscription.profile?.displayName ??
+        null,
       planName: subscription.plan
         ? `${productDisplayName(subscription.product)} · ${subscription.plan.name}`
         : null,
@@ -635,7 +637,9 @@ export class HqService {
       id: subscription.id,
       locationId: subscription.locationId,
       locationName:
-        subscription.location?.name ?? subscription.profile?.displayName ?? null,
+        subscription.location?.name ??
+        subscription.profile?.displayName ??
+        null,
       locationCity: subscription.location?.city ?? null,
       locationDeleted: subscription.profileId
         ? !subscription.profile || Boolean(subscription.profile.deletedAt)

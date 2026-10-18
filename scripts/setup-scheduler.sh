@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create or update the Cloud Scheduler job that refreshes location metrics.
-# Schedule: 9:00, 15:00, 21:00 Asia/Kolkata (IST)
+# Schedule: 21:00 Asia/Kolkata (IST)
 #
 # Usage:
 #   yarn gcp:scheduler:staging
@@ -21,7 +21,7 @@ require_gcloud_auth
 
 : "${CRON_SECRET_NAME:=CRON_SECRET}"
 : "${SCHEDULER_JOB_NAME:=refresh-location-metrics}"
-: "${SCHEDULER_SCHEDULE:=0 9,15,21 * * *}"
+: "${SCHEDULER_SCHEDULE:=0 21 * * *}"
 : "${SCHEDULER_TIME_ZONE:=Asia/Kolkata}"
 : "${SCHEDULER_ATTEMPT_DEADLINE:=900s}"
 

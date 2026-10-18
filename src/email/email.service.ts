@@ -8,9 +8,11 @@ import { LoggerService } from '../common/services/logger.service';
 import {
   adminOrderReceivedEmailHtml,
   orderConfirmationEmailHtml,
+  privateFeedbackReceivedEmailHtml,
   verificationOtpEmailHtml,
   welcomeEmailHtml,
   type OrderConfirmationEmailDetails,
+  type PrivateFeedbackEmailDetails,
 } from './templates/email.templates';
 
 const BREVO_SMTP_URL = 'https://api.brevo.com/v3/smtp/email';
@@ -72,6 +74,19 @@ export class EmailService {
       toEmail: ADMIN_ORDER_NOTIFY_EMAIL,
       subject: `New order received · ${details.businessName}`,
       htmlContent: adminOrderReceivedEmailHtml(details),
+    });
+  }
+
+  async sendPrivateFeedbackReceived(
+    email: string,
+    details: PrivateFeedbackEmailDetails,
+    toName?: string,
+  ): Promise<void> {
+    await this.sendEmail({
+      toEmail: email,
+      toName,
+      subject: `New private feedback · ${details.locationName}`,
+      htmlContent: privateFeedbackReceivedEmailHtml(details),
     });
   }
 
