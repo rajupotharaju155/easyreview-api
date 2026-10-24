@@ -1,10 +1,16 @@
 import { SubmittedAnswer } from '../ai-settings/ai-settings.service';
+import {
+  AI_TONE_PROMPTS,
+  type ResolvedAiTone,
+} from '../ai-settings/constants/tone.constants';
 import { usesLatinScript } from './languages';
 
 export type ReviewPromptContext = {
   name: string;
-  city?: string;
-  state?: string;
+  /** Area drafts may name; null means the business switched place names off. */
+  localArea: string | null;
+  /** Business-chosen or category-picked tone; null keeps the default voice. */
+  tone: ResolvedAiTone | null;
   primaryTypeDisplayName?: string;
   starRating: number;
   keywords: string[];
@@ -15,11 +21,11 @@ export type ReviewPromptContext = {
 
 /** Picked per v2 request so drafts from the same shop do not share one register. */
 const VOICES = [
-  'blunt, a bit impatient',
-  'chatty, a bit rambling',
-  'mostly facts, little praise',
-  'one specific detail then stop',
-  'casual and offhand',
+  'relaxed and easygoing',
+  'chatty, shares one small detail',
+  'matter-of-fact, with a light word of praise',
+  'happy, talks about what they liked most',
+  'helpful, adds a tip for the next visitor',
 ] as const;
 
 function pickOne<T>(items: readonly T[]): T {
@@ -32,8 +38,10 @@ function pickTopicHint(keywords: string[]): string | null {
   return pickOne(keywords);
 }
 
-function locationParts(ctx: ReviewPromptContext): string {
-  return [ctx.city, ctx.state].filter(Boolean).join(', ');
+function locationRule(ctx: ReviewPromptContext): string {
+  return ctx.localArea
+    ? `- If a draft says where the business is, call the area "${ctx.localArea}". Never name any other area, city, or state.`
+    : '- Do not mention any place name: no area, neighbourhood, city, or state.';
 }
 
 function answerLines(ctx: ReviewPromptContext): string[] {
@@ -69,7 +77,6 @@ function scriptRules(): string[] {
 
 /** Original prompt: weave in keywords, include the listing name, cover visit details. */
 export function buildV1Prompt(ctx: ReviewPromptContext): string {
-  const location = locationParts(ctx);
   const answers = answerLines(ctx);
 
   return joinPrompt([
@@ -81,8 +88,9 @@ export function buildV1Prompt(ctx: ReviewPromptContext): string {
     ctx.primaryTypeDisplayName
       ? `- Category: ${ctx.primaryTypeDisplayName}`
       : null,
-    location ? `- Location: ${location}` : null,
+    ctx.localArea ? `- Area: ${ctx.localArea}` : null,
     `- Customer star rating: ${ctx.starRating} out of 5`,
+    ctx.tone ? `- Tone: ${AI_TONE_PROMPTS[ctx.tone]}` : null,
     `- Keywords to naturally weave in when relevant: ${ctx.keywords.join(', ') || 'none'}`,
     ...(answers.length
       ? ['', 'What this customer told us about their visit:', ...answers]
@@ -102,9 +110,12 @@ export function buildV1Prompt(ctx: ReviewPromptContext): string {
     ctx.primaryTypeDisplayName
       ? '- Only mention services, staff roles, and details that a customer of this category would plausibly experience.'
       : null,
-    '- Match the tone to the star rating (higher = more positive; lower = polite constructive).',
+    ctx.tone
+      ? '- Write every draft in the tone above, and let the star rating set how positive it is (lower = polite constructive).'
+      : '- Match the tone to the star rating (higher = more positive; lower = polite constructive).',
     '- Sound like a real customer, not marketing copy.',
     '- If the business name is in all caps, do not write it in all caps. Weave it into the sentence the way a customer would. You may use the full name, a shortened everyday name, or just the kind of place. Example: "CRUSH MENS BEAUTY PARLOUR AND SALOON" can become "Crush salon", "Crush mens salon", or just "salon".',
+    locationRule(ctx),
     '- Do not invent specific staff names, prices, or unverifiable claims.',
     '- Do not include hashtags, emojis, or quotation marks around the whole review.',
     ...scriptRules(),
@@ -113,10 +124,10 @@ export function buildV1Prompt(ctx: ReviewPromptContext): string {
   ]);
 }
 
-/** Casual phone-typing prompt: no listing name, at most one keyword, varied voice. */
+/** Casual customer prompt: no business or place name, at most one keyword, varied voice. */
 export function buildV2Prompt(ctx: ReviewPromptContext): string {
-  const location = locationParts(ctx);
   const answers = answerLines(ctx);
+  // Only casual (or no) tone reaches v2; casual keeps the random voices.
   const voice = pickOne(VOICES);
   const topicHint = pickTopicHint(ctx.keywords);
   const openings = ctx.wordTargets.map(() =>
@@ -125,7 +136,7 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
 
   return joinPrompt([
     'You write Google review drafts as if you are the customer typing on a phone right after the visit.',
-    'The review will be posted on this business listing. The reader already knows the name and city.',
+    'The review will be posted on this business listing. The customer and the reader already know which place it is, so the customer just talks about it.',
     'Return ONLY valid JSON matching this shape:',
     '{"suggestions":[{"text":"...","language":"..."}]}',
     '',
@@ -134,7 +145,7 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
     ctx.primaryTypeDisplayName
       ? `- Category: ${ctx.primaryTypeDisplayName}`
       : null,
-    location ? `- Location: ${location}` : null,
+    ctx.localArea ? `- Area: ${ctx.localArea}` : null,
     `- Customer star rating: ${ctx.starRating} out of 5`,
     `- Voice for this batch: ${voice}`,
     topicHint
@@ -150,13 +161,12 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
     ),
     '',
     'Rules:',
-    '- Write like a person, not a copywriter. Contractions. Uneven sentence length. It is fine to stop abruptly.',
+    '- Write like a friendly, ordinary person, not a copywriter. Use contractions and complete, easy-flowing sentences.',
     '- Start each draft with a capital or lowercase letter as specified in firstLetter. Do not make every draft start lowercase.',
-    '- In at least one draft, start a later sentence with "..." as if a new thought. Do not start the whole review with dots.',
-    '- Leave 1–2 small grammar slips per draft (missing apostrophe, dropped "a"/"the", no capital after a period). Do not misspell service words or make the review hard to read.',
-    '- Do not mention the business name, city, or area.',
+    '- Do not mention the business name, city, or area. Refer to the place by its kind, e.g. "this resort", "the salon", "this place".',
+    '- Casual punctuation is fine, but keep it easy to read. Do not add deliberate spelling or grammar mistakes.',
     '- Do not open with "Visited", "Got a … at", or "Had a great experience".',
-    '- Do not close with "highly recommend", "must visit", "best in town", "easily the best", "10/10", or "overall".',
+    '- Do not close with "highly recommend", "best in town", "easily the best", "10/10", or "overall".',
     '- Do not use slogan phrasing (friendly staff, hidden gem, exceeded expectations, from start to finish).',
     ...(answers.length
       ? [
@@ -168,7 +178,7 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
       ? '- Only mention services, staff roles, and details that a customer of this category would plausibly experience.'
       : null,
     '- Match positivity to the star rating, but a high rating can still be casual and specific rather than glowing.',
-    '- Each draft must use a different sentence shape. One may be a fragment.',
+    '- Each draft must use a different sentence shape.',
     '- Do not invent specific staff names, prices, or unverifiable claims.',
     '- Do not refer to staff as "guy", "the guy", "this guy", "lady", or similar placeholders. Describe the work, not a nameless person.',
     '- Do not include hashtags, emojis, or quotation marks around the whole review.',
@@ -176,8 +186,8 @@ export function buildV2Prompt(ctx: ReviewPromptContext): string {
     '- Aim for approximately the target word count for each review (±15%).',
     '',
     'Register to match (tone only — do not reuse these words or phrases):',
-    '- "Did a good job, didnt rush it. ...wait was bit long though"',
-    '- "came in for the usual. decent, not much talk which i liked"',
-    '- "Better then last time. bit pricey but fine"',
+    '- "this is a decent resort with all amenities, must visit during summers when all activities are open."',
+    '- "Good haircut and they took their time to get it right. Will come back for the next one."',
+    '- "nice cozy place for a quick coffee, the cold brew is really good."',
   ]);
 }
