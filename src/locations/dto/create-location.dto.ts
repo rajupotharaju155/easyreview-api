@@ -37,6 +37,11 @@ export class CreateLocationDto {
   @IsOptional()
   @Transform(emptyToUndefined)
   @IsString()
+  localArea?: string;
+
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
   city?: string;
 
   @IsOptional()

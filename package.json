@@ -25,6 +25,7 @@
     "script:grant-old-trial": "ts-node --transpile-only scripts/grant-old-customer-trial.ts",
     "script:backfill-delivered-order-payments": "ts-node --transpile-only scripts/backfill-delivered-order-payments.ts",
     "script:backfill-profile-codes": "ts-node --transpile-only scripts/backfill-profile-codes.ts",
+    "script:backfill-location-city-area": "ts-node --transpile-only scripts/backfill-location-city-area.ts",
     "migration:create": "npm run typeorm -- migration:create ./migrations/$npm_config_name",
     "migration:run": "npm run typeorm -- migration:run -d ./typeorm.config.ts",
     "migration:run:staging": "NODE_ENV=staging npm run typeorm -- migration:run -d ./typeorm.config.ts",
