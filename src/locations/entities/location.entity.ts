@@ -53,6 +53,9 @@ export class Location {
   addressLine1: string | null;
 
   @Column({ type: 'varchar', length: 120, nullable: true })
+  localArea: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
   city: string | null;
 
   @Column({ type: 'varchar', length: 120, nullable: true })

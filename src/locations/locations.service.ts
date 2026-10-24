@@ -87,6 +87,7 @@ export class LocationsService {
             slug,
             placeId: createLocationDto.placeId,
             addressLine1: createLocationDto.addressLine1 ?? null,
+            localArea: createLocationDto.localArea ?? null,
             city: createLocationDto.city ?? null,
             state: createLocationDto.state ?? null,
             pincode: createLocationDto.pincode ?? null,
@@ -563,6 +564,9 @@ export class LocationsService {
     }
     if (updateLocationDto.addressLine1 !== undefined) {
       fields.addressLine1 = updateLocationDto.addressLine1;
+    }
+    if (updateLocationDto.localArea !== undefined) {
+      fields.localArea = updateLocationDto.localArea;
     }
     if (updateLocationDto.city !== undefined) {
       fields.city = updateLocationDto.city;
