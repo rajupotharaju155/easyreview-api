@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI, Schema, ThinkingLevel, Type } from '@google/genai';
 import { AI_MAX_LANGUAGES } from '../ai-settings/entities/ai-settings.entity';
+import type { ResolvedAiTone } from '../ai-settings/constants/tone.constants';
 import { AiSettingsService } from '../ai-settings/ai-settings.service';
 import { LocationsService } from '../locations/locations.service';
 import {
@@ -26,7 +27,7 @@ import {
  */
 const WORD_TARGET_RANGES = [
   { min: 15, max: 25 },
-  { min: 30, max: 45 },
+  { min: 45, max: 60 },
 ] as const;
 const GEMINI_MODEL = 'gemini-3.6-flash';
 const PROMPT_BUILDERS = {
@@ -78,23 +79,28 @@ export class ReviewService {
   async suggestReviews(
     dto: SuggestReviewsDto,
   ): Promise<ReviewSuggestionsResponseDto> {
-    const languages = this.normalizeLanguages(dto.languages);
-    const keywords = dto.keywords.map((k) => k.trim()).filter(Boolean);
-    const answers = await this.aiSettingsService.resolveAnswers(
-      dto.locationId,
-      dto.answers,
-    );
+    // Keywords, languages, area, and tone come from the database; the
+    // request's copies are ignored. Answers are checked against stored questions.
+    const [answers, settings] = await Promise.all([
+      this.aiSettingsService.resolveAnswers(dto.locationId, dto.answers),
+      this.aiSettingsService.findReviewSettings(dto.locationId),
+    ]);
+    const { localArea, tone } = settings;
+    const languages = this.normalizeLanguages(settings.languages);
+    const keywords = settings.keywords.map((k) => k.trim()).filter(Boolean);
     const wordTargets = this.pickWordTargets();
     const assignedLanguages = this.assignLanguages(
       languages,
       wordTargets.length,
     );
-    const promptVersion = this.pickPromptVersion();
-    this.logger.log(`\nChose review prompt ${promptVersion}`);
+    const promptVersion = this.pickPromptVersion(tone);
+    this.logger.log(
+      `\nChose review prompt ${promptVersion} (tone: ${tone ?? 'none'})`,
+    );
     const promptContext: ReviewPromptContext = {
       name: dto.name,
-      city: dto.city,
-      state: dto.state,
+      localArea,
+      tone,
       primaryTypeDisplayName: dto.primaryTypeDisplayName,
       starRating: dto.starRating,
       keywords,
@@ -203,15 +209,24 @@ export class ReviewService {
     );
   }
 
-  private pickPromptVersion(): PromptVersion {
+  /** v2 writes like a casual phone typist, so other tones always use v1. */
+  private pickPromptVersion(tone: ResolvedAiTone | null): PromptVersion {
+    if (tone && tone !== 'casual') return 'v1';
     return Math.random() < V1_PROMPT_CHANCE ? 'v1' : 'v2';
   }
 
-  /** 1 language → every draft in that language; 2 languages → one draft each. */
+  /**
+   * 2 languages → one draft each, in the order chosen. 1 language → English
+   * first, then the chosen language (all English when that is English).
+   */
   private assignLanguages(languages: string[], count: number): string[] {
+    const ordered =
+      languages.length === 1 && languages[0].toLowerCase() !== 'english'
+        ? ['English', languages[0]]
+        : languages;
     return Array.from(
       { length: count },
-      (_, index) => languages[index % languages.length],
+      (_, index) => ordered[index % ordered.length],
     );
   }
 

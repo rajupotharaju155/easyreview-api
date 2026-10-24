@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -12,10 +13,12 @@ import {
 import {
   AI_KEYWORD_MAX_LENGTH,
   AI_LANGUAGE_MAX_LENGTH,
+  AI_LOCAL_AREA_MAX_LENGTH,
   AI_MAX_KEYWORDS,
   AI_MAX_LANGUAGES,
   AI_MAX_QUESTIONS,
 } from '../entities/ai-settings.entity';
+import { AI_TONES, type AiTone } from '../constants/tone.constants';
 import { AiQuestionDto } from './ai-question.dto';
 
 function trimEach({ value }: { value: unknown }): unknown {
@@ -54,4 +57,21 @@ export class UpsertAiSettingsDto {
   @MinLength(1, { each: true })
   @MaxLength(AI_LANGUAGE_MAX_LENGTH, { each: true })
   languages?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  mentionLocalArea?: boolean;
+
+  /** Empty or equal to the location's own area clears the override. */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(AI_LOCAL_AREA_MAX_LENGTH)
+  localArea?: string;
+
+  @IsOptional()
+  @IsIn(AI_TONES)
+  tone?: AiTone;
 }

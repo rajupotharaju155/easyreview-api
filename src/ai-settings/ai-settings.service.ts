@@ -15,6 +15,12 @@ import {
   PROFILE_MIN_QUESTIONS,
   PROFILE_QUESTIONS_INCOMPLETE_MESSAGE,
 } from './constants/profile-completeness.constants';
+import {
+  AI_TONES,
+  type AiTone,
+  type ResolvedAiTone,
+  resolveAutoTone,
+} from './constants/tone.constants';
 import { AiQuestionDto } from './dto/ai-question.dto';
 import { AiSettingsResponseDto } from './dto/ai-settings-response.dto';
 import { ProfileCompletenessResponseDto } from './dto/profile-completeness-response.dto';
@@ -44,13 +50,13 @@ export class AiSettingsService {
   async findForOwnedLocation(
     locationId: string,
   ): Promise<AiSettingsResponseDto> {
-    await this.assertLocationOwned(locationId);
+    const location = await this.assertLocationOwned(locationId);
 
     const settings = await this.aiSettingsRepository.findOne({
       where: { locationId },
     });
 
-    return this.toResponse(locationId, settings);
+    return this.toResponse(location, settings);
   }
 
   async getProfileCompleteness(
@@ -69,7 +75,7 @@ export class AiSettingsService {
     locationId: string,
     upsertAiSettingsDto: UpsertAiSettingsDto,
   ): Promise<AiSettingsResponseDto> {
-    await this.assertLocationOwned(locationId);
+    const location = await this.assertLocationOwned(locationId);
 
     const existing = await this.aiSettingsRepository.findOne({
       where: { locationId },
@@ -91,6 +97,18 @@ export class AiSettingsService {
       upsertAiSettingsDto.languages !== undefined
         ? this.normalizeStringList(upsertAiSettingsDto.languages, 'language')
         : (existing?.languages ?? null);
+    const mentionLocalArea =
+      upsertAiSettingsDto.mentionLocalArea ??
+      existing?.mentionLocalArea ??
+      true;
+    const localArea =
+      upsertAiSettingsDto.localArea !== undefined
+        ? this.normalizeLocalArea(upsertAiSettingsDto.localArea, location)
+        : (existing?.localArea ?? null);
+    const tone =
+      upsertAiSettingsDto.tone !== undefined
+        ? this.storedTone(upsertAiSettingsDto.tone)
+        : (existing?.tone ?? null);
 
     const settings = existing
       ? Object.assign(existing, {
@@ -98,6 +116,9 @@ export class AiSettingsService {
           questionsEnabled,
           keywords,
           languages,
+          mentionLocalArea,
+          localArea,
+          tone,
         })
       : this.aiSettingsRepository.create({
           locationId,
@@ -105,11 +126,14 @@ export class AiSettingsService {
           questionsEnabled,
           keywords,
           languages,
+          mentionLocalArea,
+          localArea,
+          tone,
         });
 
     const saved = await this.aiSettingsRepository.save(settings);
 
-    return this.toResponse(locationId, saved);
+    return this.toResponse(location, saved);
   }
 
   /** Prompt fields for the public rating page. Questions are empty when switched off. */
@@ -129,6 +153,55 @@ export class AiSettingsService {
         : [],
       keywords: settings?.keywords ?? null,
       languages: settings?.languages?.slice(0, AI_MAX_LANGUAGES) ?? null,
+    };
+  }
+
+  /**
+   * Prompt settings for review drafts on the public rating page, read from the
+   * database so request strings never reach the prompt. A null area means name
+   * no place; a null tone means no category matched auto.
+   */
+  async findReviewSettings(locationId: string): Promise<{
+    localArea: string | null;
+    tone: ResolvedAiTone | null;
+    keywords: string[];
+    languages: string[];
+  }> {
+    const [location, settings] = await Promise.all([
+      this.locationRepository.findOne({
+        where: { id: locationId },
+        select: [
+          'id',
+          'localArea',
+          'city',
+          'primaryType',
+          'primaryTypeDisplayName',
+          'types',
+        ],
+      }),
+      this.aiSettingsRepository.findOne({
+        where: { locationId },
+        select: [
+          'id',
+          'mentionLocalArea',
+          'localArea',
+          'tone',
+          'keywords',
+          'languages',
+        ],
+      }),
+    ]);
+
+    if (!location) {
+      return { localArea: null, tone: null, keywords: [], languages: [] };
+    }
+
+    const tone = this.toneOf(settings);
+    return {
+      localArea: this.resolveLocalArea(location, settings),
+      tone: tone === 'auto' ? resolveAutoTone(location) : tone,
+      keywords: settings?.keywords ?? [],
+      languages: settings?.languages ?? [],
     };
   }
 
@@ -255,16 +328,63 @@ export class AiSettingsService {
     });
   }
 
+  /**
+   * Area the AI should name in drafts, or null when switched off or unknown.
+   * Locations without saved AI settings fall back to their own address.
+   */
+  resolveLocalArea(
+    location: Pick<Location, 'localArea' | 'city'>,
+    settings: Pick<AiSettings, 'mentionLocalArea' | 'localArea'> | null,
+  ): string | null {
+    if (settings && !settings.mentionLocalArea) {
+      return null;
+    }
+    return settings?.localArea ?? this.defaultLocalArea(location);
+  }
+
+  private defaultLocalArea(
+    location: Pick<Location, 'localArea' | 'city'>,
+  ): string | null {
+    return location.localArea?.trim() || location.city?.trim() || null;
+  }
+
+  /** Stores null unless the owner typed something other than the location's own area. */
+  private normalizeLocalArea(
+    value: string,
+    location: Pick<Location, 'localArea' | 'city'>,
+  ): string | null {
+    if (!value) {
+      return null;
+    }
+    const fallback = this.defaultLocalArea(location);
+    return fallback && this.isSameText(value, fallback) ? null : value;
+  }
+
+  /** Stored values outside AI_TONES (or null) read as auto. */
+  private toneOf(settings: Pick<AiSettings, 'tone'> | null): AiTone {
+    const tone = settings?.tone as AiTone | null | undefined;
+    return tone && AI_TONES.includes(tone) ? tone : 'auto';
+  }
+
+  private storedTone(tone: AiTone): AiTone | null {
+    return tone === 'auto' ? null : tone;
+  }
+
   private toResponse(
-    locationId: string,
+    location: Pick<Location, 'id' | 'localArea' | 'city'>,
     settings: AiSettings | null,
   ): AiSettingsResponseDto {
+    const defaultLocalArea = this.defaultLocalArea(location);
     return new AiSettingsResponseDto({
-      locationId,
+      locationId: location.id,
       questions: this.withQuestionDefaults(settings?.questions),
       questionsEnabled: settings?.questionsEnabled ?? true,
       keywords: settings?.keywords ?? [],
       languages: (settings?.languages ?? []).slice(0, AI_MAX_LANGUAGES),
+      mentionLocalArea: settings?.mentionLocalArea ?? true,
+      localArea: settings?.localArea ?? defaultLocalArea,
+      defaultLocalArea,
+      tone: this.toneOf(settings),
     });
   }
 
@@ -334,16 +454,20 @@ export class AiSettingsService {
     });
   }
 
-  private async assertLocationOwned(locationId: string): Promise<void> {
+  private async assertLocationOwned(
+    locationId: string,
+  ): Promise<Pick<Location, 'id' | 'localArea' | 'city'>> {
     const userId = this.currentUserUtil.getCurrentUserId();
     const location = await this.locationRepository.findOne({
       where: { id: locationId, userId },
-      select: ['id'],
+      select: ['id', 'localArea', 'city'],
     });
 
     if (!location) {
       throw new NotFoundException(`Location with id "${locationId}" not found`);
     }
+
+    return location;
   }
 
   private isSameText(left: string, right: string): boolean {

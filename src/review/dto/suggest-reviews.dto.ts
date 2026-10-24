@@ -86,17 +86,17 @@ export class SuggestReviewsDto {
   @MaxLength(255)
   primaryTypeDisplayName?: string;
 
+  /** Ignored: keywords come from the location's AI settings. Accepted for older clients. */
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(20)
   @IsString({ each: true })
-  keywords: string[];
+  keywords?: string[];
 
+  /** Ignored: languages come from the location's AI settings. Accepted for older clients. */
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(AI_MAX_LANGUAGES)
   @IsString({ each: true })
-  languages: string[];
+  languages?: string[];
 
   /** Answers to the location's configured questions, validated against them server-side. */
   @IsOptional()
