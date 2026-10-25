@@ -12,22 +12,19 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { emptyToUndefined } from '../../common/utils/dto-transforms';
 import { CreateReviewDto } from './create-review.dto';
-
-function emptyToUndefined({ value }: { value: unknown }): unknown {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
 
 export class CreateLocationDto {
   @IsString()
   @MinLength(1)
   name: string;
 
+  /** Omitted for a business that is not on Google. */
+  @IsOptional()
+  @Transform(emptyToUndefined)
   @IsString()
-  @MinLength(1)
-  placeId: string;
+  placeId?: string;
 
   @IsOptional()
   @Transform(emptyToUndefined)
