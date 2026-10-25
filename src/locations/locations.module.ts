@@ -9,6 +9,7 @@ import { Review } from './entities/review.entity';
 import { GooglePlacesService } from '../services/google-places.service';
 import { LocationsController } from './locations.controller';
 import { LocationsService } from './locations.service';
+import { BusinessStorageService } from './business-storage.service';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { LocationsService } from './locations.service';
     SubscriptionsModule,
   ],
   controllers: [LocationsController],
-  providers: [LocationsService, GooglePlacesService],
+  providers: [LocationsService, GooglePlacesService, BusinessStorageService],
   exports: [LocationsService],
 })
 export class LocationsModule {}

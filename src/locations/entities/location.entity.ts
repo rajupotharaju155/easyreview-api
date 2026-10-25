@@ -73,6 +73,10 @@ export class Location {
   @Column({ type: 'varchar', length: 64, nullable: true })
   phoneNumber: string | null;
 
+  /** Public URL of the business logo, used on invoices and elsewhere. */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  logoUrl: string | null;
+
   @Column({ type: 'text', nullable: true })
   websiteURI: string | null;
 
