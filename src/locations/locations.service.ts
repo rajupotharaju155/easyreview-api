@@ -38,6 +38,10 @@ import { GooglePlacesService } from '../services/google-places.service';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionStatus } from '../subscriptions/enums/subscription-status.enum';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import {
+  BusinessStorageService,
+  type BusinessLogoFile,
+} from './business-storage.service';
 import { todayIst } from '../subscriptions/utils/ist-date.util';
 
 type ScanMetricField = 'scanCount' | 'aiReviewCount' | 'redirectToGoogleCount';
@@ -65,6 +69,7 @@ export class LocationsService {
     private readonly currentUserUtil: CurrentUserUtil,
     private readonly aiSettingsService: AiSettingsService,
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly businessStorage: BusinessStorageService,
   ) {}
 
   async create(
@@ -618,6 +623,22 @@ export class LocationsService {
       }
       throw error;
     }
+  }
+
+  async uploadLogo(
+    id: string,
+    file: BusinessLogoFile,
+  ): Promise<LocationWithScanSummaryDto> {
+    await this.findOne(id);
+    const logoUrl = await this.businessStorage.uploadLogo(id, file);
+    await this.locationRepository.update(id, { logoUrl });
+    return this.findOne(id);
+  }
+
+  async removeLogo(id: string): Promise<LocationWithScanSummaryDto> {
+    await this.findOne(id);
+    await this.locationRepository.update(id, { logoUrl: null });
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<UpdateResult> {

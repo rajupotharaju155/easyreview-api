@@ -6,10 +6,12 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AiSettingsModule } from './ai-settings/ai-settings.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
+import { CashModule } from './cash/cash.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { EmailVerifiedGuard } from './auth/guards/email-verified.guard';
 import { CommonModule } from './common/common.module';
 import { ContactMessagesModule } from './contact-messages/contact-messages.module';
+import { ContactsModule } from './contacts/contacts.module';
 import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 import { LoggerService } from './common/services/logger.service';
 import { DatabaseModule } from './database/database.module';
@@ -18,6 +20,7 @@ import { ExpensesModule } from './expenses/expenses.module';
 import { HealthModule } from './health/health.module';
 import { HqModule } from './hq/hq.module';
 import { InternalJobsModule } from './internal-jobs/internal-jobs.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { LocationsModule } from './locations/locations.module';
 import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './orders/orders.module';
@@ -86,6 +89,9 @@ const envFilePath = envFiles.length > 0 ? envFiles : modeEnvFile;
     SubscriptionsModule,
     PaymentsModule,
     ExpensesModule,
+    ContactsModule,
+    InvoicesModule,
+    CashModule,
     PrivateFeedbackModule,
     ProfilesModule,
     ReviewModule,

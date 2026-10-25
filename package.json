@@ -45,6 +45,8 @@
     "gcp:qr-products-bucket:production": "bash scripts/setup-qr-products-bucket.sh production",
     "gcp:profile-bucket:staging": "bash scripts/setup-profile-bucket.sh staging",
     "gcp:profile-bucket:production": "bash scripts/setup-profile-bucket.sh production",
+    "gcp:business-bucket:staging": "bash scripts/setup-business-bucket.sh staging",
+    "gcp:business-bucket:production": "bash scripts/setup-business-bucket.sh production",
     "deploy:staging": "bash scripts/deploy-cloud-run.sh staging",
     "deploy:production": "bash scripts/deploy-cloud-run.sh production",
     "staging:stop": "bash scripts/start-stop-staging.sh stop",
