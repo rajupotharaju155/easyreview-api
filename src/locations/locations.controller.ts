@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -14,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Public } from '../common/decorators/public.decorator';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { ConnectGoogleBusinessDto } from './dto/connect-google-business.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { LocationWithScanSummaryDto } from './dto/location-with-scan-summary.dto';
 import { PublicLocationDto } from './dto/public-location.dto';
@@ -63,6 +65,17 @@ export class LocationsController {
     @Body() updateLocationDto: UpdateLocationDto,
   ) {
     return this.locationsService.update(id, updateLocationDto);
+  }
+
+  @Put(':id/google-business')
+  connectGoogleBusiness(
+    @Param('id') id: string,
+    @Body() connectGoogleBusinessDto: ConnectGoogleBusinessDto,
+  ) {
+    return this.locationsService.connectGoogleBusiness(
+      id,
+      connectGoogleBusinessDto,
+    );
   }
 
   @Post(':id/logo')

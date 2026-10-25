@@ -22,6 +22,10 @@ import {
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import {
+  GOOGLE_BUSINESS_REQUIRED_MESSAGE,
+  hasGooglePlace,
+} from '../locations/google-place-fields';
 import { Payment } from '../payments/entities/payment.entity';
 import { PaymentProvider } from '../payments/enums/payment-provider.enum';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
@@ -1017,6 +1021,9 @@ export class SubscriptionsService implements OnModuleInit {
       throw new BadRequestException(
         `${productDisplayName(product)} plans are assigned to a location`,
       );
+    }
+    if (product === Product.EASY_REVIEW && !hasGooglePlace(location)) {
+      throw new BadRequestException(GOOGLE_BUSINESS_REQUIRED_MESSAGE);
     }
     return { locationId: location.id };
   }

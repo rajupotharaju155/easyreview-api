@@ -45,9 +45,10 @@ export class Location {
   })
   menuStyle: MenuStyle;
 
+  /** Google place. Null for businesses not on Google; EasyReview needs one. */
   @Index()
-  @Column({ type: 'varchar', length: 255 })
-  placeId: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  placeId: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   addressLine1: string | null;

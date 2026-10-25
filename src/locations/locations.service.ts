@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   HttpException,
   HttpStatus,
@@ -22,6 +23,7 @@ import {
   slugCandidatesFromName,
   slugWithSuffix,
 } from '../common/utils/slug.util';
+import { ConnectGoogleBusinessDto } from './dto/connect-google-business.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { LocationWithScanSummaryDto } from './dto/location-with-scan-summary.dto';
 import { PublicLocationDto } from './dto/public-location.dto';
@@ -35,6 +37,13 @@ import { Location } from './entities/location.entity';
 import { Review } from './entities/review.entity';
 import { Product } from '../plans/enums/product.enum';
 import { GooglePlacesService } from '../services/google-places.service';
+import {
+  GOOGLE_BUSINESS_REQUIRED_MESSAGE,
+  googlePlaceFields,
+  hasGooglePlace,
+  nonEmptyGooglePlaceFields,
+} from './google-place-fields';
+import { ADDRESS_PART_KEYS, composeFormattedAddress } from './location-address';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { SubscriptionStatus } from '../subscriptions/enums/subscription-status.enum';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -87,61 +96,35 @@ export class LocationsService {
             createLocationDto.city,
           );
 
+          const fields = googlePlaceFields(createLocationDto);
+          const onGoogle = hasGooglePlace(fields);
+          if (!onGoogle) {
+            // Typed by the owner, so build the one-line address ourselves.
+            fields.formattedAddress ??= composeFormattedAddress(fields);
+          }
+
           const location = manager.create(Location, {
-            name: createLocationDto.name,
+            ...fields,
             slug,
-            placeId: createLocationDto.placeId,
-            addressLine1: createLocationDto.addressLine1 ?? null,
-            localArea: createLocationDto.localArea ?? null,
-            city: createLocationDto.city ?? null,
-            state: createLocationDto.state ?? null,
-            pincode: createLocationDto.pincode ?? null,
-            country: createLocationDto.country ?? null,
-            formattedAddress: createLocationDto.formattedAddress ?? null,
-            phoneNumber: createLocationDto.phoneNumber ?? null,
-            websiteURI: createLocationDto.websiteURI ?? null,
-            googleMapsURI: createLocationDto.googleMapsURI ?? null,
-            businessStatus: createLocationDto.businessStatus ?? null,
-            primaryType: createLocationDto.primaryType ?? null,
-            primaryTypeDisplayName:
-              createLocationDto.primaryTypeDisplayName ?? null,
-            types: createLocationDto.types?.length
-              ? createLocationDto.types
-              : null,
-            currentRating: createLocationDto.rating ?? null,
-            currentReviewCount: createLocationDto.userRatingCount ?? null,
-            metricsCapturedAt: capturedAt,
+            metricsCapturedAt: onGoogle ? capturedAt : null,
             userId,
           });
 
           const savedLocation = await manager.save(location);
 
-          const metric = manager.create(LocationMetric, {
-            locationId: savedLocation.id,
-            periodKey: LOCATION_METRIC_PERIOD_BASELINE,
-            capturedAt,
-            source: 'places_api',
-            rating: createLocationDto.rating ?? null,
-            reviewCount: createLocationDto.userRatingCount ?? null,
-          });
-
-          await manager.save(metric);
-
-          if (createLocationDto.reviews?.length) {
-            const reviews = createLocationDto.reviews.map((review) =>
-              manager.create(Review, {
-                locationId: savedLocation.id,
-                text: review.text?.trim() || null,
-                rating: review.rating ?? null,
-                publishedAt: review.publishedAt
-                  ? new Date(review.publishedAt)
-                  : null,
-                authorName: review.authorName?.trim() || null,
-                authorPhotoUri: review.authorPhotoUri?.trim() || null,
-              }),
+          if (onGoogle) {
+            await this.ensureBaselineMetric(
+              manager,
+              savedLocation.id,
+              createLocationDto,
+              capturedAt,
             );
-            await manager.save(reviews);
           }
+          await this.saveGoogleReviews(
+            manager,
+            savedLocation.id,
+            createLocationDto.reviews,
+          );
 
           return savedLocation;
         },
@@ -161,6 +144,54 @@ export class LocationsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Starting rating and review count that Analytics measures growth from.
+   * Written once, when the location first gets a Google place.
+   */
+  private async ensureBaselineMetric(
+    manager: EntityManager,
+    locationId: string,
+    dto: CreateLocationDto,
+    capturedAt: Date,
+  ): Promise<void> {
+    const existing = await manager.findOne(LocationMetric, {
+      where: { locationId, periodKey: LOCATION_METRIC_PERIOD_BASELINE },
+      select: ['id'],
+    });
+    if (existing) return;
+
+    await manager.save(
+      manager.create(LocationMetric, {
+        locationId,
+        periodKey: LOCATION_METRIC_PERIOD_BASELINE,
+        capturedAt,
+        source: 'places_api',
+        rating: dto.rating ?? null,
+        reviewCount: dto.userRatingCount ?? null,
+      }),
+    );
+  }
+
+  private async saveGoogleReviews(
+    manager: EntityManager,
+    locationId: string,
+    reviews: CreateLocationDto['reviews'],
+  ): Promise<void> {
+    if (!reviews?.length) return;
+    await manager.save(
+      reviews.map((review) =>
+        manager.create(Review, {
+          locationId,
+          text: review.text?.trim() || null,
+          rating: review.rating ?? null,
+          publishedAt: review.publishedAt ? new Date(review.publishedAt) : null,
+          authorName: review.authorName?.trim() || null,
+          authorPhotoUri: review.authorPhotoUri?.trim() || null,
+        }),
+      ),
+    );
   }
 
   private async tryGrantAdminDemoSubscription(
@@ -251,6 +282,9 @@ export class LocationsService {
 
     if (!location) {
       throw new NotFoundException(`Location with id "${id}" not found`);
+    }
+    if (!location.placeId) {
+      throw new BadRequestException(GOOGLE_BUSINESS_REQUIRED_MESSAGE);
     }
 
     const placeDetails = await this.googlePlacesService.fetchPlaceDetails(
@@ -357,6 +391,7 @@ export class LocationsService {
           today,
         },
       )
+      .where('location.placeId IS NOT NULL')
       .select(['location.id'])
       .distinct(true)
       .getMany();
@@ -386,6 +421,11 @@ export class LocationsService {
 
     if (!location || !location.slug) {
       throw new NotFoundException(`Location with slug "${slug}" not found`);
+    }
+    if (!location.placeId) {
+      throw new ConflictException(
+        'This business has not connected its Google Business yet',
+      );
     }
 
     const hasActiveSubscription =
@@ -558,14 +598,11 @@ export class LocationsService {
     id: string,
     updateLocationDto: UpdateLocationDto,
   ): Promise<LocationWithScanSummaryDto> {
-    await this.findOne(id);
+    const current = await this.findOne(id);
 
     const fields: Partial<Location> = {};
     if (updateLocationDto.name !== undefined) {
       fields.name = updateLocationDto.name;
-    }
-    if (updateLocationDto.placeId !== undefined) {
-      fields.placeId = updateLocationDto.placeId;
     }
     if (updateLocationDto.addressLine1 !== undefined) {
       fields.addressLine1 = updateLocationDto.addressLine1;
@@ -612,6 +649,16 @@ export class LocationsService {
         : null;
     }
 
+    const addressEdited = ADDRESS_PART_KEYS.some(
+      (key) => updateLocationDto[key] !== undefined,
+    );
+    if (addressEdited && updateLocationDto.formattedAddress === undefined) {
+      fields.formattedAddress = composeFormattedAddress({
+        ...current,
+        ...fields,
+      });
+    }
+
     try {
       await this.locationRepository.update(id, fields);
       return this.findOne(id);
@@ -623,6 +670,55 @@ export class LocationsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Connects a location to a Google place, e.g. a business added without
+   * Google that now wants EasyReview. Google values replace name, address,
+   * phone and place; anything Google leaves blank keeps its current value.
+   * Metrics and stored reviews belong to a place, so switching to a different
+   * place clears the old ones and starts a new baseline. Id and slug stay, so
+   * printed QR codes and links keep working.
+   */
+  async connectGoogleBusiness(
+    id: string,
+    dto: ConnectGoogleBusinessDto,
+  ): Promise<LocationWithScanSummaryDto> {
+    if (!dto.placeId) {
+      throw new BadRequestException('Select a business from Google');
+    }
+    const current = await this.findOne(id);
+    const placeChanged = current.placeId !== dto.placeId;
+    const capturedAt = new Date();
+
+    try {
+      await this.locationRepository.manager.transaction(async (manager) => {
+        await manager.update(Location, id, {
+          ...nonEmptyGooglePlaceFields(dto),
+          metricsCapturedAt: capturedAt,
+        });
+        if (placeChanged) {
+          await manager.delete(LocationMetric, { locationId: id });
+          await manager.delete(Review, { locationId: id });
+        }
+        await this.ensureBaselineMetric(manager, id, dto, capturedAt);
+        if (dto.reviews?.length) {
+          if (!placeChanged) {
+            await manager.delete(Review, { locationId: id });
+          }
+          await this.saveGoogleReviews(manager, id, dto.reviews);
+        }
+      });
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        throw new ConflictException(
+          'This Google location is already added to your account',
+        );
+      }
+      throw error;
+    }
+
+    return this.findOne(id);
   }
 
   async uploadLogo(

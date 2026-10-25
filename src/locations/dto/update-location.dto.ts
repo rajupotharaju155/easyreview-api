@@ -7,16 +7,15 @@ import {
   IsString,
   IsUrl,
   Max,
+  MaxLength,
   Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
-
-function emptyToUndefined({ value }: { value: unknown }): unknown {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
+import {
+  emptyToNull,
+  emptyToUndefined,
+} from '../../common/utils/dto-transforms';
 
 export class UpdateLocationDto {
   @IsOptional()
@@ -24,50 +23,59 @@ export class UpdateLocationDto {
   @MinLength(1)
   name?: string;
 
+  /** Blank clears the column. */
   @IsOptional()
+  @Transform(emptyToNull)
   @IsString()
-  @MinLength(1)
-  placeId?: string;
+  @MaxLength(255)
+  addressLine1?: string | null;
 
+  /** Blank clears the column. */
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(emptyToNull)
   @IsString()
-  addressLine1?: string;
+  @MaxLength(120)
+  localArea?: string | null;
 
+  /** Blank clears the column. */
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(emptyToNull)
   @IsString()
-  localArea?: string;
+  @MaxLength(120)
+  city?: string | null;
 
+  /** Blank clears the column. */
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(emptyToNull)
   @IsString()
-  city?: string;
+  @MaxLength(120)
+  state?: string | null;
 
+  /** Blank clears the column. */
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(emptyToNull)
   @IsString()
-  state?: string;
+  @MaxLength(32)
+  pincode?: string | null;
 
+  /** Blank clears the column. */
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(emptyToNull)
   @IsString()
-  pincode?: string;
+  @MaxLength(120)
+  country?: string | null;
 
+  /** Blank clears the column. */
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(emptyToNull)
   @IsString()
-  country?: string;
+  formattedAddress?: string | null;
 
+  /** Blank clears the column. */
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(emptyToNull)
   @IsString()
-  formattedAddress?: string;
-
-  @IsOptional()
-  @Transform(emptyToUndefined)
-  @IsString()
-  phoneNumber?: string;
+  phoneNumber?: string | null;
 
   @IsOptional()
   @Transform(emptyToUndefined)

@@ -925,13 +925,16 @@ export class HqService {
     if (!targetUser) {
       throw new NotFoundException(`User with id "${targetUserId}" not found`);
     }
-    const existing = await this.locationRepository.findOne({
-      where: {
-        userId: targetUserId,
-        placeId: location.placeId,
-        id: Not(location.id),
-      },
-    });
+    // Businesses not on Google have no place to clash on.
+    const existing = location.placeId
+      ? await this.locationRepository.findOne({
+          where: {
+            userId: targetUserId,
+            placeId: location.placeId,
+            id: Not(location.id),
+          },
+        })
+      : null;
     if (existing) {
       throw new ConflictException(
         'Selected user already has a location with this Google Place ID',
