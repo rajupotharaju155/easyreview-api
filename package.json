@@ -39,6 +39,8 @@
     "gcp:bootstrap:production": "bash scripts/bootstrap-gcp.sh production",
     "gcp:scheduler:staging": "bash scripts/setup-scheduler.sh staging",
     "gcp:scheduler:production": "bash scripts/setup-scheduler.sh production",
+    "report:reviews:staging": "bash scripts/daily-review-report.sh staging",
+    "report:reviews:production": "bash scripts/daily-review-report.sh production",
     "gcp:menu-bucket:staging": "bash scripts/setup-menu-bucket.sh staging",
     "gcp:menu-bucket:production": "bash scripts/setup-menu-bucket.sh production",
     "gcp:qr-products-bucket:staging": "bash scripts/setup-qr-products-bucket.sh staging",
