@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { stateNameFromCode } from '../invoices/gst/gst-states';
 import { gstinStateCode, isValidGstin } from '../invoices/gst/gstin';
@@ -197,6 +197,52 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
     return customer;
+  }
+
+  /**
+   * Customer id for a guest who ordered, creating the contact and customer
+   * when no customer has `phone` or one of `matchPhones` (e.g. without the
+   * country code, or with a stray 0). An existing customer keeps the name
+   * the business saved.
+   */
+  async findOrCreateByPhone(
+    manager: EntityManager,
+    locationId: string,
+    input: { name: string; phone: string; matchPhones: string[] },
+  ): Promise<string> {
+    const phones = [...new Set([input.phone, ...input.matchPhones])];
+    // Prefer the record saved exactly as `phone` over older variants.
+    const preferExact = <T extends { phone: string | null }>(rows: T[]) =>
+      rows.find((row) => row.phone === input.phone) ?? rows[0];
+
+    const customers = await manager
+      .createQueryBuilder(Customer, 'customer')
+      .innerJoinAndSelect('customer.contact', 'contact')
+      .where('customer.locationId = :locationId', { locationId })
+      .andWhere('contact.phone IN (:...phones)', { phones })
+      .orderBy('customer.createdAt', 'ASC')
+      .getMany();
+    const existing = preferExact(
+      customers.map((row) => ({ id: row.id, phone: row.contact.phone })),
+    );
+    if (existing) return existing.id;
+
+    // Reuse the contact left behind by a removed customer with this phone.
+    const contact =
+      preferExact(
+        await manager.find(Contact, {
+          where: { locationId, phone: In(phones) },
+          order: { createdAt: 'ASC' },
+        }),
+      ) ??
+      (await manager.save(
+        new Contact({ locationId, name: input.name, phone: input.phone }),
+      ));
+
+    const customer = await manager.save(
+      new Customer({ locationId, contactId: contact.id }),
+    );
+    return customer.id;
   }
 
   toBillTo(customer: Customer): InvoiceBillTo {

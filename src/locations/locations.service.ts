@@ -19,6 +19,7 @@ import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { generateId } from '../common/utils/id';
+import { isValidTimeZone } from '../common/utils/time-zone.util';
 import {
   slugCandidatesFromName,
   slugWithSuffix,
@@ -647,6 +648,15 @@ export class LocationsService {
       fields.types = updateLocationDto.types.length
         ? updateLocationDto.types
         : null;
+    }
+    if (updateLocationDto.currency !== undefined) {
+      fields.currency = updateLocationDto.currency;
+    }
+    if (updateLocationDto.timezone !== undefined) {
+      if (!isValidTimeZone(updateLocationDto.timezone)) {
+        throw new BadRequestException('Time zone is not valid');
+      }
+      fields.timezone = updateLocationDto.timezone;
     }
 
     const addressEdited = ADDRESS_PART_KEYS.some(

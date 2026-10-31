@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -121,4 +122,19 @@ export class UpdateLocationDto {
   @IsArray()
   @IsString({ each: true })
   types?: string[];
+
+  /** ISO 4217 code, e.g. "INR", "USD". */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @Matches(/^[A-Z]{3}$/, { message: 'currency must be a 3-letter ISO code' })
+  currency?: string;
+
+  /** IANA time zone, e.g. "Asia/Kolkata". */
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
 }

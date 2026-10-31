@@ -23,6 +23,7 @@ import { InternalJobsModule } from './internal-jobs/internal-jobs.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { LocationsModule } from './locations/locations.module';
 import { MenuModule } from './menu/menu.module';
+import { MenuOrdersModule } from './menu-orders/menu-orders.module';
 import { OrdersModule } from './orders/orders.module';
 import { PlansModule } from './plans/plans.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -83,6 +84,7 @@ const envFilePath = envFiles.length > 0 ? envFiles : modeEnvFile;
     UsersModule,
     LocationsModule,
     MenuModule,
+    MenuOrdersModule,
     AiSettingsModule,
     OrdersModule,
     PlansModule,
