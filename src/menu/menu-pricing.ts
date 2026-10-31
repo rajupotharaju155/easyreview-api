@@ -1,4 +1,5 @@
 import { generateId } from '../common/utils/id';
+import { MenuPriceType } from './enums/menu-price-type.enum';
 
 export const MAX_PRICE_VARIANTS = 12;
 export const MAX_VARIANT_NAME_LENGTH = 80;
@@ -128,4 +129,78 @@ export function dropRemovedVariantPrices(
 ): MenuItemVariantPrice[] {
   const allowed = new Set(variants.map((variant) => variant.id));
   return prices.filter((row) => allowed.has(row.variantId));
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Billed combo price: the override when set, else the sum of full prices. */
+export function comboPricing(
+  items: Array<{ fullPrice: number | null }>,
+  priceOverride: number | null,
+): {
+  itemsSubtotal: number;
+  priceOverride: number | null;
+  price: number;
+  savings: number;
+} {
+  const itemsSubtotal = roundMoney(
+    items.reduce((sum, item) => sum + Number(item.fullPrice || 0), 0),
+  );
+  const override = priceOverride == null ? null : Number(priceOverride);
+  const price = roundMoney(override ?? itemsSubtotal);
+  const savings = roundMoney(Math.max(0, itemsSubtotal - price));
+  return { itemsSubtotal, priceOverride: override, price, savings };
+}
+
+const HALF_PRICE_OPTION = 'half';
+const FULL_PRICE_OPTION = 'full';
+
+type OrderablePriceInput = {
+  isNotAvailable: boolean;
+  priceType: MenuPriceType;
+  isMultiPriced: boolean;
+  variantPrices: MenuItemVariantPrice[] | null;
+  isHalfServed: boolean;
+  halfPrice: number | null;
+  fullPrice: number | null;
+};
+
+/**
+ * Price a guest pays for one unit of an item, or null when it can't be
+ * ordered. "Onwards" and free items have no exact price, so they're not
+ * orderable. `priceOption` picks half/full or a price variant id.
+ */
+export function orderableItemPrice(
+  item: OrderablePriceInput,
+  variants: MenuPriceVariant[],
+  priceOption: string | null | undefined,
+): { unitPrice: number; variantLabel: string | null } | null {
+  if (item.isNotAvailable) return null;
+
+  if (item.isMultiPriced) {
+    const row = coerceVariantPrices(item.variantPrices).find(
+      (price) => price.variantId === priceOption,
+    );
+    const variant = variants.find((v) => v.id === priceOption);
+    if (!row || !variant) return null;
+    return { unitPrice: Number(row.price), variantLabel: variant.name };
+  }
+
+  if (item.priceType !== MenuPriceType.FIXED || item.fullPrice == null) {
+    return null;
+  }
+
+  if (item.isHalfServed) {
+    if (priceOption === HALF_PRICE_OPTION && item.halfPrice != null) {
+      return { unitPrice: Number(item.halfPrice), variantLabel: 'Half' };
+    }
+    if (priceOption === FULL_PRICE_OPTION) {
+      return { unitPrice: Number(item.fullPrice), variantLabel: 'Full' };
+    }
+    return null;
+  }
+
+  return { unitPrice: Number(item.fullPrice), variantLabel: null };
 }

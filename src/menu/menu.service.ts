@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { CurrentUserUtil } from '../common/utils/current-user.util';
 import { Location } from '../locations/entities/location.entity';
+import { MenuOrderType } from '../menu-orders/enums/menu-order-type.enum';
 import { Product } from '../plans/enums/product.enum';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { MenuStyle } from './enums/menu-style.enum';
@@ -31,6 +32,7 @@ import { MenuStorageService, type MenuImageFile } from './menu-storage.service';
 import {
   coercePriceVariants,
   coerceVariantPrices,
+  comboPricing,
   dropRemovedVariantPrices,
   minVariantPrice,
   normalizePriceVariants,
@@ -100,7 +102,11 @@ export type LocationMenuDto = {
     state: string | null;
     phoneNumber: string | null;
     formattedAddress: string | null;
+    country: string | null;
     menuStyle: MenuStyle;
+    menuOrderingEnabled: boolean;
+    menuOrderTypes: MenuOrderType[];
+    currency: string;
   };
   categories: MenuCategoryDto[];
   combos: MenuComboDto[];
@@ -144,7 +150,11 @@ export class MenuService {
         'state',
         'phoneNumber',
         'formattedAddress',
+        'country',
         'menuStyle',
+        'menuOrderingEnabled',
+        'menuOrderTypes',
+        'currency',
       ],
     });
 
@@ -622,7 +632,11 @@ export class MenuService {
         state: location.state,
         phoneNumber: location.phoneNumber ?? null,
         formattedAddress: location.formattedAddress ?? null,
+        country: location.country ?? null,
         menuStyle: location.menuStyle ?? MenuStyle.RESTAURANT_STYLE,
+        menuOrderingEnabled: location.menuOrderingEnabled,
+        menuOrderTypes: location.menuOrderTypes,
+        currency: location.currency,
       },
       categories: categories.map((category) => ({
         ...this.toCategoryDto(category),
@@ -692,14 +706,6 @@ export class MenuService {
     items: MenuItem[],
     itemIds: string[],
   ): MenuComboDto {
-    const itemsSubtotal = roundMoney(
-      items.reduce((sum, item) => sum + Number(item.fullPrice || 0), 0),
-    );
-    const priceOverride =
-      combo.priceOverride == null ? null : Number(combo.priceOverride);
-    const price = roundMoney(priceOverride ?? itemsSubtotal);
-    const savings = roundMoney(Math.max(0, itemsSubtotal - price));
-
     return {
       id: combo.id,
       locationId: combo.locationId,
@@ -707,10 +713,7 @@ export class MenuService {
       sortOrder: combo.sortOrder,
       itemIds,
       items: items.map((item) => this.toItemDto(item)),
-      itemsSubtotal,
-      priceOverride,
-      price,
-      savings,
+      ...comboPricing(items, combo.priceOverride),
     };
   }
 
@@ -726,7 +729,11 @@ export class MenuService {
         'state',
         'phoneNumber',
         'formattedAddress',
+        'country',
         'menuStyle',
+        'menuOrderingEnabled',
+        'menuOrderTypes',
+        'currency',
       ],
     });
 
@@ -1012,8 +1019,4 @@ export class MenuService {
       throw new BadRequestException('Image URL is too long');
     }
   }
-}
-
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
 }

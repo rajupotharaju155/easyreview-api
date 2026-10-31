@@ -13,6 +13,10 @@ import {
 } from 'typeorm';
 import { generateId, ID_LENGTH } from '../../common/utils/id';
 import { MenuStyle } from '../../menu/enums/menu-style.enum';
+import {
+  DEFAULT_MENU_ORDER_TYPES,
+  MenuOrderType,
+} from '../../menu-orders/enums/menu-order-type.enum';
 import { User } from '../../users/entities/user.entity';
 import { LocationMetric } from './location-metric.entity';
 import { LocationScanMetric } from './location-scan-metric.entity';
@@ -44,6 +48,30 @@ export class Location {
     default: MenuStyle.RESTAURANT_STYLE,
   })
   menuStyle: MenuStyle;
+
+  /** Guests can add items to a cart and place orders from the public menu. */
+  @Column({ type: 'boolean', default: true })
+  menuOrderingEnabled: boolean;
+
+  /** With country code. Orders go here; falls back to phoneNumber when null. */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  menuWhatsappNumber: string | null;
+
+  /** Order types guests can choose from, e.g. dine_in, takeaway. */
+  @Column({
+    type: 'text',
+    array: true,
+    default: () => `'{${DEFAULT_MENU_ORDER_TYPES.join(',')}}'`,
+  })
+  menuOrderTypes: MenuOrderType[];
+
+  /** ISO 4217 code, e.g. "INR", "USD". */
+  @Column({ type: 'varchar', length: 3, default: 'INR' })
+  currency: string;
+
+  /** IANA time zone, e.g. "Asia/Kolkata". Decides the business's calendar day. */
+  @Column({ type: 'varchar', length: 64, default: 'Asia/Kolkata' })
+  timezone: string;
 
   /** Google place. Null for businesses not on Google; EasyReview needs one. */
   @Index()
