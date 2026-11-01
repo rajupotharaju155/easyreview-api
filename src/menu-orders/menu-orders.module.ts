@@ -7,6 +7,7 @@ import { MenuCategory } from '../menu/entities/menu-category.entity';
 import { MenuComboItem } from '../menu/entities/menu-combo-item.entity';
 import { MenuCombo } from '../menu/entities/menu-combo.entity';
 import { MenuItem } from '../menu/entities/menu-item.entity';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { MenuOrderItem } from './entities/menu-order-item.entity';
 import { MenuOrderSequence } from './entities/menu-order-sequence.entity';
@@ -32,6 +33,7 @@ import { PublicMenuOrdersController } from './public-menu-orders.controller';
     LocationAccessModule,
     ContactsModule,
     SubscriptionsModule,
+    PushNotificationsModule,
   ],
   controllers: [MenuOrdersController, PublicMenuOrdersController],
   providers: [MenuOrdersService, MenuOrderPlacementService],

@@ -29,6 +29,7 @@ import { PlansModule } from './plans/plans.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrivateFeedbackModule } from './private-feedback/private-feedback.module';
 import { ProfilesModule } from './profiles/profiles.module';
+import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ReviewModule } from './review/review.module';
 import { StoriesModule } from './stories/stories.module';
@@ -85,6 +86,7 @@ const envFilePath = envFiles.length > 0 ? envFiles : modeEnvFile;
     LocationsModule,
     MenuModule,
     MenuOrdersModule,
+    PushNotificationsModule,
     AiSettingsModule,
     OrdersModule,
     PlansModule,
