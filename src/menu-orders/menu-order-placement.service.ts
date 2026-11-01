@@ -23,6 +23,7 @@ import {
   orderableItemPrice,
 } from '../menu/menu-pricing';
 import { Product } from '../plans/enums/product.enum';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import {
   CreateMenuOrderDto,
@@ -33,7 +34,12 @@ import { MenuOrder } from './entities/menu-order.entity';
 import { MenuOrderItemType } from './enums/menu-order-item-type.enum';
 import { MenuOrderStatus } from './enums/menu-order-status.enum';
 import { SPOT_ORDER_TYPES } from './enums/menu-order-type.enum';
-import { buildMenuOrderMessage, buildWhatsappUrl } from './menu-order-message';
+import {
+  buildMenuOrderMessage,
+  buildMenuOrderPush,
+  buildWhatsappUrl,
+  MENU_ORDER_PUSH_DELIVERY,
+} from './menu-order-message';
 
 /** E.164 allows at most 15 digits including the country code. */
 const MAX_INTERNATIONAL_PHONE_DIGITS = 15;
@@ -77,6 +83,7 @@ export class MenuOrderPlacementService {
     private readonly comboItemRepository: Repository<MenuComboItem>,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly customersService: CustomersService,
+    private readonly pushService: PushNotificationsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -157,6 +164,13 @@ export class MenuOrderPlacementService {
       return saved;
     });
 
+    // Not awaited: the guest's checkout doesn't wait on the owner's devices.
+    void this.pushService.sendToUser(
+      location.userId,
+      buildMenuOrderPush(order, location.name),
+      MENU_ORDER_PUSH_DELIVERY,
+    );
+
     const message = buildMenuOrderMessage({ ...order, items: lines });
     return {
       id: order.id,
@@ -175,6 +189,8 @@ export class MenuOrderPlacementService {
       where: { slug },
       select: [
         'id',
+        'userId',
+        'name',
         'slug',
         'phoneNumber',
         'menuOrderingEnabled',

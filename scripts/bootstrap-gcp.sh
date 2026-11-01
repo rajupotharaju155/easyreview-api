@@ -149,6 +149,7 @@ echo
 : "${BREVO_API_KEY_SECRET:=BREVO_API_KEY}"
 : "${CRON_SECRET_NAME:=CRON_SECRET}"
 : "${RAZORPAY_KEY_SECRET_NAME:=RAZORPAY_KEY_SECRET}"
+: "${VAPID_PRIVATE_KEY_SECRET:=VAPID_PRIVATE_KEY}"
 
 create_or_update_secret "${DATABASE_SECRET}" "Enter DATABASE_URL"
 create_or_update_secret "${JWT_SECRET_NAME}" "Enter JWT_SECRET"
@@ -157,6 +158,7 @@ create_or_update_secret "${GOOGLE_MAPS_API_KEY_SECRET}" "Enter GOOGLE_MAPS_API_K
 create_or_update_secret "${BREVO_API_KEY_SECRET}" "Enter BREVO_API_KEY"
 create_or_update_secret "${CRON_SECRET_NAME}" "Enter CRON_SECRET (long random string for Cloud Scheduler)"
 create_or_update_secret "${RAZORPAY_KEY_SECRET_NAME}" "Enter RAZORPAY_KEY_SECRET"
+create_or_update_secret "${VAPID_PRIVATE_KEY_SECRET}" "Enter VAPID_PRIVATE_KEY (npx web-push generate-vapid-keys)"
 
 # ---------------------------------------------------------------------------
 # 4) IAM — Cloud Build (source bucket + image push)
@@ -198,6 +200,7 @@ grant_secret_accessor "${GOOGLE_MAPS_API_KEY_SECRET}" "serviceAccount:${RUNTIME_
 grant_secret_accessor "${BREVO_API_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${CRON_SECRET_NAME}" "serviceAccount:${RUNTIME_SA}"
 grant_secret_accessor "${RAZORPAY_KEY_SECRET_NAME}" "serviceAccount:${RUNTIME_SA}"
+grant_secret_accessor "${VAPID_PRIVATE_KEY_SECRET}" "serviceAccount:${RUNTIME_SA}"
 
 # ---------------------------------------------------------------------------
 # 6) Preflight checks
@@ -213,7 +216,7 @@ else
   echo "  ✓ CLOUD_SQL_INSTANCE=${CLOUD_SQL_INSTANCE}"
 fi
 
-for secret_id in "${DATABASE_SECRET}" "${JWT_SECRET_NAME}" "${GEMINI_API_KEY_SECRET}" "${GOOGLE_MAPS_API_KEY_SECRET}" "${BREVO_API_KEY_SECRET}" "${CRON_SECRET_NAME}" "${RAZORPAY_KEY_SECRET_NAME}"; do
+for secret_id in "${DATABASE_SECRET}" "${JWT_SECRET_NAME}" "${GEMINI_API_KEY_SECRET}" "${GOOGLE_MAPS_API_KEY_SECRET}" "${BREVO_API_KEY_SECRET}" "${CRON_SECRET_NAME}" "${RAZORPAY_KEY_SECRET_NAME}" "${VAPID_PRIVATE_KEY_SECRET}"; do
   if gcloud secrets describe "${secret_id}" --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
     echo "  ✓ Secret ${secret_id} exists"
   else

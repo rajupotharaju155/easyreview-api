@@ -16,9 +16,9 @@ export class MenuOrdersController {
     return this.menuOrdersService.list(locationId, query);
   }
 
-  @Get('pulse')
-  pulse(@Param('locationId') locationId: string) {
-    return this.menuOrdersService.pulse(locationId);
+  @Get('summary')
+  summary(@Param('locationId') locationId: string) {
+    return this.menuOrdersService.summary(locationId);
   }
 
   @Get('settings')

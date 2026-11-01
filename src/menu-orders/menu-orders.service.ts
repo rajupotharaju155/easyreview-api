@@ -53,8 +53,8 @@ export type MenuOrderDto = {
   items?: MenuOrderItemDto[];
 };
 
-/** What the dashboard polls to notice new orders cheaply. */
-export type MenuOrderPulseDto = {
+/** New-order count for the badge, and the latest order to catch up on missed alerts. */
+export type MenuOrderSummaryDto = {
   latestOrderId: string | null;
   newCount: number;
 };
@@ -135,7 +135,7 @@ export class MenuOrdersService {
     return this.toDto(await this.requireOrder(locationId, orderId));
   }
 
-  async pulse(locationId: string): Promise<MenuOrderPulseDto> {
+  async summary(locationId: string): Promise<MenuOrderSummaryDto> {
     await this.locationAccess.requireOwned(locationId);
     const [latest, newCount] = await Promise.all([
       this.orderRepository.findOne({
